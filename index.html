@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>prm visual - Kreativec</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;700;800&family=Syne+Mono&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    :root {
+      --bg:     #0b0b09;
+      --ink:    #f2ede6;
+      --muted:  rgba(242,237,230,0.32);
+      --faint:  rgba(242,237,230,0.06);
+      --blue:   #5b9cf6;
+      --border: rgba(242,237,230,0.07);
+    }
+
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      font-size: 16px;
+      overflow-x: hidden;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: 'Syne', sans-serif;
+      cursor: none;
+      overflow-x: hidden;
+      max-width: 100vw;
+    }
+
+    @media (hover:none) {
+      body { cursor: auto; }
+      #cur-dot, #cur-ring { display: none !important; }
+    }
+
+    /* ── CURSOR ──────────────────────────────────── */
+    #cur-dot {
+      position:fixed; z-index:9999;
+      width:5px; height:5px;
+      background: var(--blue);
+      border-radius:50%;
+      transform:translate(-50%,-50%);
+      pointer-events:none;
+      transition:transform .1s ease;
+    }
+    #cur-ring {
+      position:fixed; z-index:9998;
+      width:26px; height:26px;
+      border:1px solid rgba(242,237,230,.25);
+      border-radius:50%;
+      transform:translate(-50%,-50%);
+      pointer-events:none;
+      transition:width .3s, height .3s, border-color .3s;
+    }
+    body.hov #cur-ring { width:50px; height:50px; border-color:rgba(91,156,246,.45); }
+    body.hov #cur-dot  { transform:translate(-50%,-50%) scale(1.5); }
+
+    /* ── 3D CANVAS ──────────────────────────────── */
+    #c3d { position:fixed; inset:0; z-index:1; pointer-events:none; }
+
+    /* ── GRAIN ──────────────────────────────────── */
+    body::after {
+      content:''; position:fixed; inset:0; z-index:500;
+      pointer-events:none;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      opacity:.022; mix-blend-mode:overlay;
+    }
+
+    /* ── INTRO ──────────────────────────────────── */
+    #intro {
+      position:fixed; inset:0; z-index:8000;
+      background:var(--bg);
+      display:flex; align-items:center; justify-content:center;
+      flex-direction:column; gap:2rem;
+      transition:opacity .9s ease, visibility .9s ease;
+    }
+    #intro.out { opacity:0; visibility:hidden; pointer-events:none; }
+    .intro-logo {
+      font-size:11px; font-weight:700; letter-spacing:10px;
+      text-transform:uppercase; color:rgba(242,237,230,.15);
+      animation:flicker 2.2s ease infinite;
+    }
+    @keyframes flicker { 0%,100%{opacity:1;} 47%{opacity:1;} 50%{opacity:.3;} 53%{opacity:1;} }
+    .intro-bar { width:160px; height:1px; background:var(--border); overflow:hidden; }
+    .intro-fill { height:100%; width:0%; background:linear-gradient(to right, var(--blue), var(--ink)); }
+    .intro-num {
+      font-family:'Syne Mono',monospace;
+      font-size:10px; letter-spacing:3px; color:rgba(242,237,230,.2);
+    }
+
+    /* ── NAV ──────────────────────────────────────── */
+    nav {
+      position:fixed; top:0; left:0; right:0; z-index:200;
+      padding:1.8rem 3.5rem;
+      display:flex; justify-content:space-between; align-items:center;
+    }
+    .nav-logo { font-size:12px; font-weight:700; letter-spacing:5px; text-transform:uppercase; color:var(--ink); }
+    .nav-links { display:flex; gap:2.5rem; list-style:none; }
+    .nav-links a {
+      font-family:'Syne Mono',monospace; font-size:9px; letter-spacing:3px;
+      text-transform:uppercase; color:var(--muted); text-decoration:none; transition:color .3s;
+    }
+    .nav-links a:hover { color:var(--ink); }
+    .nav-avail { display:flex; align-items:center; gap:.7rem; font-family:'Syne Mono',monospace; font-size:9px; letter-spacing:2px; color:var(--muted); }
+    .avail-dot { width:5px; height:5px; border-radius:50%; background:var(--blue); animation:throb 2.4s ease infinite; }
+    @keyframes throb {
+      0%,100%{ box-shadow:0 0 0 0 rgba(91,156,246,.5); }
+      50%{ box-shadow:0 0 0 5px rgba(91,156,246,0); }
+    }
+
+    /* Mobile hamburger */
+    #hamburger {
+      display:none; flex-direction:column; gap:5px;
+      cursor:none; background:none; border:none; padding:4px;
+    }
+    #hamburger span { display:block; width:22px; height:1px; background:var(--ink); transition:all .3s ease; }
+    #hamburger.open span:nth-child(1) { transform:translateY(6px) rotate(45deg); }
+    #hamburger.open span:nth-child(2) { opacity:0; }
+    #hamburger.open span:nth-child(3) { transform:translateY(-6px) rotate(-45deg); }
+
+    #mob-menu {
+      position:fixed; inset:0; z-index:190; background:var(--bg);
+      display:none; flex-direction:column; align-items:center; justify-content:center; gap:2.5rem;
+    }
+    #mob-menu.open { display:flex; }
+    #mob-menu a {
+      font-size:clamp(28px,8vw,48px); font-weight:800; letter-spacing:-1px;
+      color:var(--ink); text-decoration:none; transition:color .2s;
+    }
+    #mob-menu a:hover { color:var(--blue); }
+    .mob-avail { font-family:'Syne Mono',monospace; font-size:9px; letter-spacing:3px; color:var(--muted); text-transform:uppercase; margin-top:1rem; display:flex; align-items:center; gap:.6rem; }
+
+    /* ── SCROLL PROGRESS ────────────────────────── */
+    #sprog { position:fixed; left:1.8rem; top:50%; transform:translateY(-50%); height:90px; width:1px; background:var(--border); z-index:200; }
+    #sprog-fill { position:absolute; top:0; left:0; width:100%; background:var(--blue); transition:height .08s linear; }
+
+    /* ── SECTION BASE ───────────────────────────── */
+    section { position:relative; z-index:2; min-height:100vh; }
+
+    /* ── HERO ───────────────────────────────────── */
+    #hero {
+      display:flex; align-items:flex-end;
+      padding:0 8vw 7rem;
+      min-height:100svh;
+    }
+    .hero-inner { max-width:min(800px, 100%); width:100%; }
+    .hero-eyebrow {
+      font-family:'Syne Mono',monospace; font-size:9px; letter-spacing:4px;
+      text-transform:uppercase; color:var(--muted); margin-bottom:2rem;
+      opacity:0; animation:slideUp .6s ease 1.6s forwards;
+    }
+    .hero-title {
+      font-size:clamp(52px, 10.5vw, 170px);
+      font-weight:800; line-height:.9; letter-spacing:-2px;
+      word-break:break-word; hyphens:auto;
+      opacity:0; animation:slideUp .9s ease 1.7s forwards;
+    }
+    .hero-title .line2 { display:block; font-weight:400; font-style:italic; color:var(--muted); }
+    .hero-desc {
+      margin-top:3rem; font-size:clamp(14px,1.3vw,17px); color:var(--muted);
+      line-height:1.85; font-weight:400; max-width:min(400px,100%);
+      opacity:0; animation:fadeA .7s ease 2.1s forwards;
+    }
+    .hero-cta {
+      margin-top:3rem; display:inline-flex; align-items:center; gap:1.5rem;
+      font-family:'Syne Mono',monospace; font-size:9px; letter-spacing:4px;
+      text-transform:uppercase; color:var(--muted);
+      opacity:0; animation:fadeA .7s ease 2.4s forwards;
+    }
+    .hero-cta::before { content:''; width:40px; height:1px; background:linear-gradient(to right, var(--blue), transparent); }
+    .hero-coords {
+      position:absolute; top:8rem; right:4rem;
+      font-family:'Syne Mono',monospace; font-size:8px; letter-spacing:2px;
+      color:rgba(242,237,230,.1); line-height:1.8; text-align:right;
+      opacity:0; animation:fadeA .7s ease 2.6s forwards;
+    }
+    @keyframes slideUp { from{opacity:0;transform:translateY(35px);} to{opacity:1;transform:translateY(0);} }
+    @keyframes fadeA { from{opacity:0;} to{opacity:1;} }
+
+    /* ── MARQUEE ──────────────────────────────────── */
+    .marquee-wrap {
+      position:relative; z-index:2;
+      border-top:1px solid var(--border); border-bottom:1px solid var(--border);
+      overflow:hidden; padding:1rem 0;
+    }
+    .marquee-track { display:flex; width:max-content; animation:march 30s linear infinite; }
+    .marquee-track span { font-family:'Syne Mono',monospace; font-size:9px; letter-spacing:4px; text-transform:uppercase; color:var(--muted); padding:0 2.5rem; white-space:nowrap; }
+    .marquee-track .acc { color:var(--blue); }
+    @keyframes march { from{transform:translateX(0);} to{transform:translateX(-50%);} }
+
+    /* ── O MNE ──────────────────────────────────── */
+    #omne { display:flex; align-items:center; padding:0 8vw; }
+    .omne-grid { display:grid; grid-template-columns:180px 1fr; gap:6rem; align-items:start; width:100%; }
+    .side-lbl { font-family:'Syne Mono',monospace; font-size:9px; letter-spacing:3px; text-transform:uppercase; color:var(--muted); writing-mode:vertical-rl; transform:rotate(180deg); }
+    .sec-tag { font-family:'Syne Mono',monospace; font-size:9px; letter-spacing:4px; text-transform:uppercase; color:var(--blue); margin-bottom:2rem; }
+    .omne-heading { font-size:clamp(34px,4.2vw,62px); font-weight:700; line-height:1.08; letter-spacing:-1.5px; margin-bottom:3rem; }
+    .omne-heading em { font-style:italic; font-weight:400; color:var(--muted); }
+    .omne-cols { display:grid; grid-template-columns:1fr 1fr; gap:3rem; margin-bottom:3rem; }
+    .omne-p { font-size:15px; line-height:1.95; color:rgba(242,237,230,.5); font-weight:400; }
+    .omne-p strong { color:var(--ink); font-weight:500; }
+    .divider { height:1px; background:var(--border); margin:2rem 0; }
+    .chips { display:flex; flex-wrap:wrap; gap:.55rem; }
+    .chip { font-family:'Syne Mono',monospace; font-size:8px; letter-spacing:2px; text-transform:uppercase; color:var(--muted); border:1px solid var(--border); padding:.32rem .7rem; transition:border-color .25s, color .25s; }
+    .chip:hover { border-color:var(--blue); color:var(--blue); }
+
+    /* ── PROJEKTY ──────────────────────────────── */
+    #projekty { padding:8rem 8vw; min-height:auto; }
+    .proj-hd { display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:4rem; }
+    .proj-hd-title { font-size:clamp(40px,5.5vw,80px); font-weight:800; letter-spacing:-2px; line-height:1; }
+    .proj-hd-note { font-family:'Syne Mono',monospace; font-size:9px; letter-spacing:3px; color:var(--muted); }
+    .proj-row {
+      display:grid; grid-template-columns:52px 1fr 190px 70px;
+      align-items:center; padding:1.7rem 0; border-top:1px solid var(--border); gap:2rem; cursor:none;
+    }
+    .proj-row:last-child { border-bottom:1px solid var(--border); }
+    .proj-row:hover .pr-name { letter-spacing:-.1px; }
+    .proj-row:hover .pr-arr { transform:translate(5px,-5px); color:var(--ink); }
+    .pr-n { font-family:'Syne Mono',monospace; font-size:10px; letter-spacing:2px; color:var(--muted); }
+    .pr-name { font-size:clamp(18px,2vw,32px); font-weight:700; letter-spacing:-.5px; transition:letter-spacing .3s ease; }
+    .pr-type { font-family:'Syne Mono',monospace; font-size:8px; letter-spacing:3px; text-transform:uppercase; color:var(--muted); }
+    .pr-yr { font-family:'Syne Mono',monospace; font-size:9px; color:var(--muted); text-align:right; display:flex; align-items:center; justify-content:flex-end; gap:.4rem; }
+    .pr-arr { transition:transform .3s ease, color .3s ease; }
+
+    /* ── FILOZOFIE ──────────────────────────────── */
+    #filozofie { display:flex; align-items:center; justify-content:center; text-align:center; padding:4rem 8vw; border-top:1px solid var(--border); }
+    .filo-inner { max-width:880px; }
+    .filo-tag { font-family:'Syne Mono',monospace; font-size:9px; letter-spacing:4px; text-transform:uppercase; color:var(--blue); margin-bottom:3rem; opacity:0; transition:opacity .7s ease; }
+    .filo-tag.vis { opacity:1; }
+    .filo-q { font-size:clamp(34px,5.5vw,78px); font-weight:800; letter-spacing:-2.5px; line-height:1.1; clip-path:inset(0 100% 0 0); transition:clip-path 1.4s cubic-bezier(.77,0,.175,1) .2s; }
+    .filo-q.vis { clip-path:inset(0 0% 0 0); }
+    .filo-q em { font-style:italic; font-weight:400; color:var(--muted); }
+    .filo-attr { margin-top:4rem; font-family:'Syne Mono',monospace; font-size:9px; letter-spacing:4px; color:rgba(242,237,230,.16); text-transform:uppercase; opacity:0; transition:opacity .7s ease .8s; display:flex; align-items:center; justify-content:center; gap:2rem; }
+    .filo-attr.vis { opacity:1; }
+    .filo-attr::before, .filo-attr::after { content:''; width:45px; height:1px; background:var(--border); }
+
+    /* ── KONTAKT ──────────────────────────────── */
+    #kontakt { padding:8rem 8vw 6rem; border-top:1px solid var(--border); min-height:auto; display:grid; grid-template-columns:1fr 1fr; gap:8rem; align-items:end; }
+    .kontakt-heading { font-size:clamp(56px,9vw,128px); font-weight:800; letter-spacing:-4px; line-height:.9; margin-bottom:3rem; }
+    .kontakt-email { display:inline-flex; align-items:center; gap:1rem; font-size:clamp(13px,1.5vw,18px); font-weight:500; color:var(--ink); text-decoration:none; border-bottom:1px solid rgba(242,237,230,.18); padding-bottom:.5rem; transition:border-color .3s; }
+    .kontakt-email:hover { border-color:var(--blue); }
+    .kontakt-email .arr { transition:transform .3s ease; display:inline-block; }
+    .kontakt-email:hover .arr { transform:translate(4px,-4px); }
+    .kontakt-right { padding-bottom:.5rem; }
+    .info-list { display:flex; flex-direction:column; gap:2rem; }
+    .info-lbl { font-family:'Syne Mono',monospace; font-size:8px; letter-spacing:3px; text-transform:uppercase; color:var(--muted); margin-bottom:.35rem; }
+    .info-val { font-size:15px; font-weight:500; color:var(--ink); }
+    .socials { margin-top:3rem; display:flex; gap:2rem; flex-wrap:wrap; }
+    .soc-link { font-family:'Syne Mono',monospace; font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--muted); text-decoration:none; transition:color .25s; }
+    .soc-link:hover { color:var(--blue); }
+
+    /* ── GAMES BUTTON ─────────────────────────── */
+    #games-btn {
+      position:fixed; bottom:2.5rem; right:2.5rem; z-index:300;
+      display:flex; flex-direction:column; align-items:center; gap:.8rem;
+      text-decoration:none; opacity:0; pointer-events:none;
+      transition:opacity .5s ease, transform .5s ease;
+      transform:translateY(12px);
+    }
+    #games-btn.visible { opacity:1; pointer-events:all; transform:translateY(0); }
+    .gbtn-orb {
+      width:52px; height:52px; position:relative;
+    }
+    .gbtn-orb .go-r {
+      position:absolute; border-radius:50%;
+      border:1px solid var(--blue);
+    }
+    .go-r1 { inset:0; animation:gs1 7s linear infinite; opacity:.85; }
+    .go-r2 { inset:8px; animation:gs2 10s linear infinite; opacity:.5;
+      border-top-color:transparent; border-bottom-color:transparent; }
+    .go-r3 { inset:16px; animation:gs1 13s linear infinite reverse; opacity:.35;
+      border-left-color:transparent; border-right-color:transparent; }
+    @keyframes gs1 { to{transform:rotate(360deg);} }
+    @keyframes gs2 { to{transform:rotate(-360deg) scaleX(.55);} }
+    .gbtn-label {
+      font-family:'Syne Mono',monospace; font-size:8px; letter-spacing:3px;
+      text-transform:uppercase; color:var(--blue);
+      transition:color .25s;
+    }
+    #games-btn:hover .gbtn-label { color:var(--ink); }
+    #games-btn:hover .go-r { border-color:var(--ink); }
+
+    /* ── FOOTER ──────────────────────────────── */
+    footer { position:relative; z-index:2; padding:2rem 8vw; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+    .ft-l, .ft-r { font-family:'Syne Mono',monospace; font-size:8px; letter-spacing:2px; color:rgba(242,237,230,.16); }
+
+    /* ── EASTER EGG ──────────────────────────── */
+    #egg {
+      position:fixed; bottom:3rem; left:50%; transform:translateX(-50%) translateY(16px);
+      background:var(--bg); border:1px solid rgba(91,156,246,.3);
+      padding:1rem 2.5rem; z-index:6000;
+      opacity:0; transition:all .5s ease; pointer-events:none; text-align:center; white-space:nowrap;
+    }
+    #egg.show { opacity:1; transform:translateX(-50%) translateY(0); }
+    #egg .eg-t { font-family:'Syne Mono',monospace; font-size:9px; letter-spacing:3px; color:var(--blue); text-transform:uppercase; }
+    #egg .eg-s { font-size:12px; color:var(--muted); margin-top:.3rem; font-style:italic; }
+
+    /* ── REVEAL ──────────────────────────────── */
+    .rev { opacity:0; transform:translateY(28px); transition:opacity .85s ease, transform .85s ease; }
+    .rev.vis { opacity:1; transform:translateY(0); }
+    .rev.d1 { transition-delay:.12s; }
+    .rev.d2 { transition-delay:.24s; }
+    .rev.d3 { transition-delay:.36s; }
+
+    /* ══════ RESPONSIVE ══════════════════════════ */
+    @media (max-width:1024px) {
+      nav { padding:1.6rem 2.5rem; }
+      .nav-links { gap:1.8rem; }
+      #hero { padding:0 6vw 6rem; }
+      .omne-grid { gap:4rem; }
+      .omne-cols { gap:2rem; }
+      #projekty { padding:6rem 6vw; }
+      #kontakt { padding:6rem 6vw 5rem; gap:5rem; }
+      footer { padding:2rem 6vw; }
+    }
+
+    @media (max-width:768px) {
+      body { cursor:auto; }
+      nav { padding:1.4rem 5vw; }
+      .nav-links, .nav-avail { display:none; }
+      #hamburger { display:flex; }
+      #sprog { display:none; }
+
+      #hero { padding:0 5vw 5rem; }
+      .hero-coords { display:none; }
+      .hero-title { letter-spacing:-1.5px; font-size:clamp(48px,12vw,100px); }
+
+      #omne { padding:0 5vw; }
+      .omne-grid { grid-template-columns:1fr; gap:0; }
+      .side-lbl { display:none; }
+      .omne-cols { grid-template-columns:1fr; gap:1.5rem; }
+
+      #projekty { padding:5rem 5vw; }
+      .proj-row { grid-template-columns:40px 1fr auto; gap:1rem; }
+      .pr-type { display:none; }
+      .proj-hd { flex-direction:column; align-items:flex-start; gap:.5rem; }
+
+      #filozofie { padding:4rem 5vw; }
+      .filo-q { letter-spacing:-1.5px; }
+
+      #kontakt { grid-template-columns:1fr; gap:4rem; padding:5rem 5vw 4rem; }
+      .kontakt-heading { letter-spacing:-2.5px; }
+
+      footer { padding:1.5rem 5vw; flex-direction:column; gap:.6rem; text-align:center; }
+      .marquee-track { animation-duration:18s; }
+
+      #games-btn { bottom:1.5rem; right:1.5rem; }
+      #egg { white-space:normal; max-width:80vw; text-align:center; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="cur-dot"></div>
+<div id="cur-ring"></div>
+<canvas id="c3d"></canvas>
+<div id="sprog"><div id="sprog-fill"></div></div>
+
+<div id="intro">
+  <div class="intro-logo">prm visual</div>
+  <div class="intro-bar"><div class="intro-fill" id="ibar"></div></div>
+  <div class="intro-num" id="inum">0%</div>
+</div>
+
+<div id="egg">
+  <div class="eg-t">nasel jsi me</div>
+  <div class="eg-s">Krasu najdes v detailu, ktery skoro prehlédnes.</div>
+</div>
+
+<!-- Games floating button -->
+<a href="games.html" id="games-btn" aria-label="Prejit na Games">
+  <div class="gbtn-orb">
+    <div class="go-r go-r1"></div>
+    <div class="go-r go-r2"></div>
+    <div class="go-r go-r3"></div>
+  </div>
+  <div class="gbtn-label">Games →</div>
+</a>
+
+<nav>
+  <div class="nav-logo">prm visual</div>
+  <ul class="nav-links">
+    <li><a href="#omne">O mne</a></li>
+    <li><a href="#projekty">Projekty</a></li>
+    <li><a href="#filozofie">Filozofie</a></li>
+    <li><a href="#kontakt">Kontakt</a></li>
+  </ul>
+  <div class="nav-avail"><div class="avail-dot"></div>Dostupny pro spolupraci</div>
+  <button id="hamburger" aria-label="Menu">
+    <span></span><span></span><span></span>
+  </button>
+</nav>
+
+<div id="mob-menu">
+  <a href="#omne">O mne</a>
+  <a href="#projekty">Projekty</a>
+  <a href="#filozofie">Filozofie</a>
+  <a href="#kontakt">Kontakt</a>
+  <div class="mob-avail"><div class="avail-dot"></div>Dostupny pro spolupraci</div>
+</div>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="hero-inner">
+    <div class="hero-eyebrow">prm visual - Nachod, CR · 2025</div>
+    <h1 class="hero-title" id="htitle">
+      Kreativec.<br>
+      <span class="line2">Tvorim.</span>
+    </h1>
+    <p class="hero-desc">Grafika, film, foto, design a vsechno mezi tim - delam to s durazem na detail a originalitu.</p>
+    <div class="hero-cta">Scrolluj dolu</div>
+  </div>
+  <div class="hero-coords">
+    50°25'N 16°09'E<br>
+    UTC +1 / SEC<br>
+    prmvisual.cz
+  </div>
+</section>
+
+<div class="marquee-wrap" aria-hidden="true">
+  <div class="marquee-track" id="mtk"></div>
+</div>
+
+<!-- O MNE -->
+<section id="omne">
+  <div class="omne-grid">
+    <div class="side-lbl">01 - O mne</div>
+    <div>
+      <div class="sec-tag rev">Kdo jsem</div>
+      <h2 class="omne-heading rev d1">Vse co delam,<br><em>delam naplno.</em></h2>
+      <div class="omne-cols rev d2">
+        <p class="omne-p">Jsem <strong>19lety kreativec z Nachoda</strong>. Pracuji na pomezi umeni a technologii - tam, kde se vizual potkava s napadem.</p>
+        <p class="omne-p">At jde o grafiku, film nebo clothing brand, vzdy hledam zpusob jak udelat vec lepe nez se ceka. <strong>Prumer me nebavi.</strong></p>
+      </div>
+      <div class="divider rev d3"></div>
+      <div class="chips rev d3">
+        <span class="chip">Graficky design</span>
+        <span class="chip">Fotografie</span>
+        <span class="chip">Filmmaking</span>
+        <span class="chip">Post-production</span>
+        <span class="chip">Clothing brand</span>
+        <span class="chip">Marketing</span>
+        <span class="chip">Games</span>
+        <span class="chip">Investovani</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJEKTY -->
+<section id="projekty">
+  <div class="proj-hd rev">
+    <h2 class="proj-hd-title">Vybrane<br>projekty</h2>
+    <div class="proj-hd-note">06 Projektu</div>
+  </div>
+  <div id="proj-list">
+    <div class="proj-row rev">
+      <span class="pr-n">01</span><span class="pr-name">Meridian</span>
+      <span class="pr-type">Graficky design</span>
+      <span class="pr-yr">2025 <span class="pr-arr">↗</span></span>
+    </div>
+    <div class="proj-row rev d1">
+      <span class="pr-n">02</span><span class="pr-name">Shadows Vol.1</span>
+      <span class="pr-type">Fotografie</span>
+      <span class="pr-yr">2025 <span class="pr-arr">↗</span></span>
+    </div>
+    <div class="proj-row rev d2">
+      <span class="pr-n">03</span><span class="pr-name">72 Hodin</span>
+      <span class="pr-type">Filmmaking</span>
+      <span class="pr-yr">2025 <span class="pr-arr">↗</span></span>
+    </div>
+    <div class="proj-row rev d3">
+      <span class="pr-n">04</span><span class="pr-name">Capsule 001</span>
+      <span class="pr-type">Clothing brand</span>
+      <span class="pr-yr">2024 <span class="pr-arr">↗</span></span>
+    </div>
+    <div class="proj-row rev d1">
+      <span class="pr-n">05</span><span class="pr-name">Level One</span>
+      <span class="pr-type">Game design</span>
+      <span class="pr-yr">2024 <span class="pr-arr">↗</span></span>
+    </div>
+    <div class="proj-row rev d2">
+      <span class="pr-n">06</span><span class="pr-name">RecenzePro</span>
+      <span class="pr-type">Micro SaaS / Web</span>
+      <span class="pr-yr">2024 <span class="pr-arr">↗</span></span>
+    </div>
+  </div>
+</section>
+
+<!-- FILOZOFIE -->
+<section id="filozofie">
+  <div class="filo-inner">
+    <div class="filo-tag">Presvedceni</div>
+    <h2 class="filo-q">Nejlepsi veci<br><em>teprve</em><br>prijdou.</h2>
+    <div class="filo-attr">prm visual · Nachod · 2025</div>
+  </div>
+</section>
+
+<!-- KONTAKT -->
+<section id="kontakt">
+  <div class="rev">
+    <h2 class="kontakt-heading">Pojdme<br>tvorit.</h2>
+    <a href="mailto:prema.kosar@seznam.cz" class="kontakt-email">
+      prema.kosar@seznam.cz <span class="arr">↗</span>
+    </a>
+  </div>
+  <div class="kontakt-right rev d1">
+    <div class="info-list">
+      <div><div class="info-lbl">Lokace</div><div class="info-val">Cela CR / Remote / Zahranici</div></div>
+      <div><div class="info-lbl">Dostupnost</div><div class="info-val">Otevreny projektum 2025</div></div>
+      <div><div class="info-lbl">Odpoved</div><div class="info-val">Do 24 hodin</div></div>
+    </div>
+    <div class="socials">
+      <a href="https://www.instagram.com/prmvisual?igsh=dnFtNTFrdGkxMm5j&utm_source=qr" target="_blank" rel="noopener" class="soc-link">Instagram</a>
+      <a href="https://youtube.com/@farby1058?si=tJj6bYl74YgBGkJX" target="_blank" rel="noopener" class="soc-link">YouTube</a>
+      <a href="https://www.tiktok.com/@prmvisual?_r=1&_t=ZN-95UVYCpdwhv" target="_blank" rel="noopener" class="soc-link">TikTok</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="ft-l">© 2025 prm visual. Vsechna prava vyhrazena.</div>
+  <div class="ft-r">Tvoreno s preciznosti.</div>
+</footer>
+
+<script>
+// ── HAMBURGER ──────────────────────────────
+const burger=document.getElementById('hamburger'),mobMenu=document.getElementById('mob-menu');
+burger.addEventListener('click',()=>{
+  burger.classList.toggle('open'); mobMenu.classList.toggle('open');
+  document.body.style.overflow=mobMenu.classList.contains('open')?'hidden':'';
+});
+document.querySelectorAll('#mob-menu a').forEach(a=>a.addEventListener('click',()=>{
+  burger.classList.remove('open'); mobMenu.classList.remove('open'); document.body.style.overflow='';
+}));
+
+// ── CURSOR ──────────────────────────────────
+const dot=document.getElementById('cur-dot'),ring=document.getElementById('cur-ring');
+let mx=0,my=0,rx=0,ry=0;
+document.addEventListener('mousemove',e=>{ mx=e.clientX; my=e.clientY; dot.style.left=mx+'px'; dot.style.top=my+'px'; });
+(function tick(){ rx+=(mx-rx)*.11; ry+=(my-ry)*.11; ring.style.left=rx+'px'; ring.style.top=ry+'px'; requestAnimationFrame(tick); })();
+document.querySelectorAll('a,.proj-row,.chip').forEach(el=>{
+  el.addEventListener('mouseenter',()=>document.body.classList.add('hov'));
+  el.addEventListener('mouseleave',()=>document.body.classList.remove('hov'));
+});
+
+// ── MARQUEE ──────────────────────────────────
+const mtk=document.getElementById('mtk');
+const words=['Grafika','<span class="acc">+</span>','Film','<span class="acc">+</span>','Foto','<span class="acc">+</span>','Design','<span class="acc">+</span>','Branding','<span class="acc">+</span>','Moda','<span class="acc">+</span>','Marketing','<span class="acc">+</span>','Hry','<span class="acc">+</span>','Kreativita','<span class="acc">+</span>'];
+const rpt=[...words,...words,...words,...words];
+mtk.innerHTML=rpt.map(w=>`<span>${w}</span>`).join('');
+
+// ── THREE.JS ──────────────────────────────────
+const canvas3d=document.getElementById('c3d');
+const W=()=>window.innerWidth,H=()=>window.innerHeight;
+const renderer=new THREE.WebGLRenderer({canvas:canvas3d,alpha:true,antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.setClearColor(0x000000,0);
+renderer.setSize(W(),H());
+const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(42,W()/H(),.1,100);
+camera.position.z=5;
+
+const icoGeo=new THREE.IcosahedronGeometry(1,0),edgeGeo=new THREE.EdgesGeometry(icoGeo);
+const mainMat=new THREE.LineBasicMaterial({color:0xf2ede6,transparent:true,opacity:0});
+const icoMesh=new THREE.LineSegments(edgeGeo,mainMat); scene.add(icoMesh);
+const outerMat=new THREE.LineBasicMaterial({color:0xf2ede6,transparent:true,opacity:0});
+const outerMesh=new THREE.LineSegments(edgeGeo.clone(),outerMat); outerMesh.scale.setScalar(1.45); scene.add(outerMesh);
+const ptGeo=new THREE.BufferGeometry(),posAttr=icoGeo.attributes.position;
+const uniq=[],seen=new Set();
+for(let i=0;i<posAttr.count;i++){
+  const k=`${posAttr.getX(i).toFixed(3)},${posAttr.getY(i).toFixed(3)},${posAttr.getZ(i).toFixed(3)}`;
+  if(!seen.has(k)){seen.add(k);uniq.push(posAttr.getX(i),posAttr.getY(i),posAttr.getZ(i));}
+}
+ptGeo.setAttribute('position',new THREE.Float32BufferAttribute(uniq,3));
+const ptMat=new THREE.PointsMaterial({color:0x5b9cf6,size:.04,transparent:true,opacity:0});
+const ptMesh=new THREE.Points(ptGeo,ptMat); scene.add(ptMesh);
+const eggMat=new THREE.LineBasicMaterial({color:0x5b9cf6,transparent:true,opacity:0});
+const eggMesh=new THREE.LineSegments(edgeGeo.clone(),eggMat); scene.add(eggMesh);
+
+let sX=0,sY=0,sS=1,tX=0,tY=0,tS=1,miX=0,miY=0,eggActive=false,eggTimer=0,introOp=0;
+function vpScale(){ const h=2*Math.tan(21*Math.PI/180)*5; return{w:h*(W()/H()),h}; }
+window.addEventListener('resize',()=>{ renderer.setSize(W(),H()); camera.aspect=W()/H(); camera.updateProjectionMatrix(); });
+
+function animate(){
+  requestAnimationFrame(animate);
+  sX+=(tX-sX)*.055; sY+=(tY-sY)*.055; sS+=(tS-sS)*.055;
+  const tmx=(mx/W()-.5)*.4,tmy=(my/H()-.5)*.4;
+  miX+=(tmx-miX)*.05; miY+=(tmy-miY)*.05;
+  const sp=eggActive?.045:.006;
+  icoMesh.rotation.y+=sp; icoMesh.rotation.x+=sp*.4;
+  outerMesh.rotation.y-=sp*.6; outerMesh.rotation.x+=sp*.25;
+  eggMesh.rotation.copy(icoMesh.rotation); ptMesh.rotation.copy(icoMesh.rotation);
+  icoMesh.rotation.x+=miY*.3; icoMesh.rotation.y+=miX*.3;
+  [icoMesh,outerMesh,eggMesh,ptMesh].forEach(m=>m.position.set(sX,sY,0));
+  icoMesh.scale.setScalar(sS); outerMesh.scale.setScalar(sS*1.45);
+  eggMesh.scale.setScalar(sS); ptMesh.scale.setScalar(sS);
+  if(eggActive){
+    eggTimer++; eggMat.opacity=Math.min(eggTimer/20,.85);
+    mainMat.opacity=Math.max(mainMat.opacity-.02,0); outerMat.opacity=0;
+    if(eggTimer>200){eggActive=false;eggTimer=0;eggMat.opacity=0;}
+  } else {
+    eggMat.opacity=Math.max(eggMat.opacity-.03,0);
+    mainMat.opacity=Math.min(mainMat.opacity+.01,introOp*.72);
+    outerMat.opacity=Math.min(outerMat.opacity+.005,introOp*.09);
+    ptMat.opacity=Math.min(ptMat.opacity+.01,introOp*.9);
+  }
+  renderer.render(scene,camera);
+}
+animate();
+
+// ── INTRO ──────────────────────────────────
+const introEl=document.getElementById('intro'),ibar=document.getElementById('ibar'),inum=document.getElementById('inum');
+let prog=0;
+const iv=setInterval(()=>{
+  prog+=Math.random()*7+2;
+  if(prog>=100){prog=100;clearInterval(iv);setTimeout(()=>{introEl.classList.add('out');introOp=1;},300);}
+  ibar.style.width=prog+'%'; inum.textContent=Math.floor(prog)+'%';
+},38);
+
+// ── SCROLL ──────────────────────────────────
+const gamesBtn=document.getElementById('games-btn');
+function onScroll(){
+  const sy=window.scrollY,maxS=document.body.scrollHeight-H();
+  document.getElementById('sprog-fill').style.height=(sy/maxS*100)+'%';
+  // Show games button when near bottom
+  gamesBtn.classList.toggle('visible', sy > maxS * 0.6);
+  const vp=vpScale(),isMob=W()<=768,sec=sy/H();
+  const kf=isMob?[
+    {x:0,y:-.1,s:.55},{x:0,y:.12,s:.45},{x:0,y:.10,s:.42},{x:0,y:0,s:.9},{x:0,y:-.1,s:.5}
+  ]:[
+    {x:.28,y:-.24,s:1.0},{x:-.28,y:.20,s:.55},{x:.28,y:.22,s:.48},{x:0,y:0,s:1.32},{x:.28,y:-.22,s:.65}
+  ];
+  const i=Math.min(Math.floor(sec),kf.length-2),t=sec-i;
+  const a=kf[i],b=kf[Math.min(i+1,kf.length-1)];
+  const lrp=(a,b,t)=>a+(b-a)*t;
+  tX=lrp(a.x,b.x,t)*vp.w*.5; tY=lrp(a.y,b.y,t)*vp.h*.5; tS=lrp(a.s,b.s,t);
+}
+window.addEventListener('scroll',onScroll,{passive:true}); onScroll();
+
+// ── REVEALS ──────────────────────────────────
+const obs=new IntersectionObserver(e=>e.forEach(x=>{if(x.isIntersecting)x.target.classList.add('vis');}),{threshold:.1});
+document.querySelectorAll('.rev,.filo-tag,.filo-q,.filo-attr').forEach(el=>obs.observe(el));
+
+// ── SCRAMBLE ──────────────────────────────────
+const CHARS='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+function scramble(setter,final,delay=0){
+  setTimeout(()=>{
+    let step=0;
+    const si=setInterval(()=>{
+      setter(final.split('').map((c,i)=>{ if(c===' ')return ' '; if(i<step/3)return c; return CHARS[Math.floor(Math.random()*CHARS.length)]; }).join(''));
+      step++; if(step>final.length*3){setter(final);clearInterval(si);}
+    },28);
+  },delay);
+}
+setTimeout(()=>{
+  const t=document.getElementById('htitle'),l2=t.querySelector('.line2');
+  scramble(v=>{t.childNodes[0].textContent=v;},'Kreativec.',0);
+  scramble(v=>{l2.textContent=v;},'Tvorim.',360);
+},1400);
+
+// ── EASTER EGG ──────────────────────────────
+let typed='';
+const eggEl=document.getElementById('egg');
+document.addEventListener('keydown',e=>{
+  if(e.ctrlKey||e.altKey||e.metaKey)return;
+  typed+=e.key.toUpperCase();
+  if(typed.length>5)typed=typed.slice(-5);
+  if(typed==='FORMA'){eggActive=true;eggTimer=0;typed='';eggEl.classList.add('show');setTimeout(()=>eggEl.classList.remove('show'),4000);}
+});
+</script>
+</body>
+</html>
