@@ -104,8 +104,8 @@
     #filozofie{display:flex;align-items:center;justify-content:center;text-align:center;padding:4rem 8vw;border-top:1px solid var(--border);}
     .filo-inner{max-width:880px;}
     .filo-tag{font-family:'Syne Mono',monospace;font-size:9px;letter-spacing:4px;text-transform:uppercase;color:var(--blue);margin-bottom:3rem;}
-    .filo-q{font-size:clamp(34px,5.5vw,78px);font-weight:800;letter-spacing:-2.5px;line-height:1.1;clip-path:inset(0 100% 0 0);transition:clip-path 1.4s cubic-bezier(.77,0,.175,1) .2s;}
-    .filo-q.vis{clip-path:inset(0 0% 0 0);}
+    .filo-q{font-size:clamp(34px,5.5vw,78px);font-weight:800;letter-spacing:-2.5px;line-height:1.1;opacity:0;transform:translateY(28px);transition:opacity 1.1s ease .1s,transform 1.1s ease .1s;}
+    .filo-q.vis{opacity:1;transform:translateY(0);}
     .filo-q em{font-style:italic;font-weight:400;color:var(--muted);}
     .filo-attr{margin-top:4rem;font-family:'Syne Mono',monospace;font-size:9px;letter-spacing:4px;color:rgba(242,237,230,.16);text-transform:uppercase;display:flex;align-items:center;justify-content:center;gap:2rem;}
     .filo-attr::before,.filo-attr::after{content:'';width:45px;height:1px;background:var(--border);}
@@ -218,7 +218,7 @@
 </nav>
 <div id="mob-menu">
   <a href="#omne">O mne</a><a href="#projekty">Projekty</a>
-  <a href="#filozofie">Filozofie</a><a href="#kontakt">Kontakt</a>
+  <a href="#kontakt">Kontakt</a>
   <div class="mob-avail"><div class="avail-dot"></div>Dostupny pro spolupraci</div>
 </div>
 
@@ -274,7 +274,7 @@
     </div>
     <div class="proj-row rev d2">
       <span class="pr-n">03</span><span class="pr-name">PrmBlocks</span>
-      <span class="pr-type">UI - Dev Toolkit</span><span class="pr-yr">2026 <span class="pr-arr">↗</span></span>
+      <span class="pr-type">Puzzle Game</span><span class="pr-yr">2026 <span class="pr-arr">↗</span></span>
     </div>
     <div class="proj-row rev d3">
       <span class="pr-n">04</span><span class="pr-name">Fakturo</span>
