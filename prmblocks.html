@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PrmBlocks — prm visual</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;700;800&family=Syne+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#0b0b09;--ink:#f2ede6;--muted:rgba(242,237,230,0.32);--blue:#5b9cf6;--border:rgba(242,237,230,0.07);--surface:rgba(242,237,230,0.03);}
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+    html{font-size:16px;overflow-x:hidden;}
+    body{background:var(--bg);color:var(--ink);font-family:'Syne',sans-serif;overflow-x:hidden;}
+    body::after{content:'';position:fixed;inset:0;z-index:500;pointer-events:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");opacity:.015;mix-blend-mode:overlay;}
+    /* INTRO */
+    #intro{position:fixed;inset:0;z-index:8000;background:var(--bg);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:2rem;transition:opacity .9s ease,visibility .9s ease;}
+    #intro.out{opacity:0;visibility:hidden;pointer-events:none;}
+    .intro-logo{font-size:11px;font-weight:700;letter-spacing:10px;text-transform:uppercase;color:rgba(242,237,230,.15);animation:flicker 2.2s ease infinite;}
+    @keyframes flicker{0%,100%{opacity:1;}47%{opacity:1;}50%{opacity:.3;}53%{opacity:1;}}
+    .intro-bar{width:160px;height:1px;background:var(--border);overflow:hidden;}
+    .intro-fill{height:100%;width:0%;background:linear-gradient(to right,var(--blue),var(--ink));}
+    .intro-num{font-family:'Syne Mono',monospace;font-size:10px;letter-spacing:3px;color:rgba(242,237,230,.2);}
+    /* TOPBAR */
+    .topbar{position:fixed;top:0;left:0;right:0;z-index:100;height:52px;background:rgba(11,11,9,.95);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 2rem;}
+    .tb-left{display:flex;align-items:center;gap:1.5rem;}
+    .tb-back{font-family:'Syne Mono',monospace;font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);text-decoration:none;transition:color .25s;display:flex;align-items:center;gap:.5rem;}
+    .tb-back:hover{color:var(--ink);}
+    .tb-sep{width:1px;height:16px;background:var(--border);}
+    .tb-logo{font-size:11px;font-weight:700;letter-spacing:4px;text-transform:uppercase;color:var(--ink);}
+    .tb-logo span{color:var(--blue);}
+    .tb-badge{font-family:'Syne Mono',monospace;font-size:7px;letter-spacing:2px;text-transform:uppercase;color:rgba(242,237,230,.3);border:1px solid var(--border);padding:.2rem .5rem;}
+    .tb-right{display:flex;align-items:center;gap:1rem;}
+    .tb-version{font-family:'Syne Mono',monospace;font-size:8px;letter-spacing:2px;color:rgba(242,237,230,.2);}
+    /* LAYOUT */
+    .app-layout{display:grid;grid-template-columns:240px 1fr;min-height:100vh;padding-top:52px;}
+    /* SIDEBAR */
+    .sidebar{border-right:1px solid var(--border);padding:2rem 0;position:sticky;top:52px;height:calc(100vh - 52px);overflow-y:auto;}
+    .sb-section{margin-bottom:2.5rem;}
+    .sb-label{font-family:'Syne Mono',monospace;font-size:7px;letter-spacing:3px;text-transform:uppercase;color:rgba(242,237,230,.2);padding:0 1.5rem;margin-bottom:.75rem;}
+    .sb-item{display:flex;align-items:center;gap:.75rem;padding:.55rem 1.5rem;font-family:'Syne Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);cursor:pointer;transition:all .2s;border-left:2px solid transparent;}
+    .sb-item:hover{color:var(--ink);background:rgba(255,255,255,.02);}
+    .sb-item.active{color:var(--blue);border-left-color:var(--blue);background:rgba(91,156,246,.04);}
+    .sb-count{margin-left:auto;font-size:7px;color:rgba(242,237,230,.3);}
+    /* MAIN */
+    .main-content{padding:2.5rem;}
+    .page-hd{margin-bottom:3rem;padding-bottom:2rem;border-bottom:1px solid var(--border);}
+    .page-hd-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.75rem;}
+    .page-title{font-size:clamp(22px,2.5vw,32px);font-weight:800;letter-spacing:-1px;}
+    .page-desc{font-size:13px;color:rgba(242,237,230,.45);line-height:1.7;max-width:520px;}
+    .search-bar{display:flex;align-items:center;gap:.5rem;border:1px solid var(--border);padding:.5rem 1rem;background:var(--surface);margin-top:1.5rem;max-width:380px;}
+    .search-bar input{background:none;border:none;outline:none;font-family:'Syne Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--ink);width:100%;}
+    .search-bar input::placeholder{color:rgba(242,237,230,.2);}
+    .search-icon{font-size:10px;color:var(--muted);}
+    /* COMPONENT SECTION */
+    .comp-section{margin-bottom:4rem;}
+    .cs-header{display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem;}
+    .cs-title{font-size:13px;font-weight:700;letter-spacing:-.3px;}
+    .cs-line{flex:1;height:1px;background:var(--border);}
+    .cs-count{font-family:'Syne Mono',monospace;font-size:7px;letter-spacing:2px;color:rgba(242,237,230,.2);}
+    /* COMPONENT CARDS */
+    .comp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1px;background:var(--border);}
+    .comp-card{background:var(--bg);padding:2rem;position:relative;}
+    .comp-preview{min-height:90px;display:flex;align-items:center;justify-content:center;margin-bottom:1.5rem;border:1px solid var(--border);padding:1.5rem;}
+    .comp-name{font-size:11px;font-weight:700;letter-spacing:-.2px;margin-bottom:.25rem;}
+    .comp-meta{font-family:'Syne Mono',monospace;font-size:7px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);}
+    .copy-btn{position:absolute;top:1rem;right:1rem;font-family:'Syne Mono',monospace;font-size:7px;letter-spacing:2px;text-transform:uppercase;padding:.25rem .6rem;border:1px solid var(--border);color:rgba(242,237,230,.2);background:none;cursor:pointer;transition:all .2s;opacity:0;}
+    .comp-card:hover .copy-btn{opacity:1;}
+    .copy-btn:hover{border-color:var(--blue);color:var(--blue);}
+    .copy-btn.copied{border-color:rgba(78,203,113,.4);color:#4ecb71;}
+
+    /* ── PREVIEW COMPONENTS ─────────────────────── */
+    /* Buttons */
+    .pb-primary{background:var(--blue);color:#000;border:none;padding:.55rem 1.4rem;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;letter-spacing:.5px;cursor:pointer;}
+    .pb-ghost{background:none;color:var(--ink);border:1px solid rgba(242,237,230,.25);padding:.55rem 1.4rem;font-family:'Syne',sans-serif;font-size:12px;font-weight:500;cursor:pointer;}
+    .pb-text{background:none;color:var(--blue);border:none;padding:.55rem 0;font-family:'Syne Mono',monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;display:flex;align-items:center;gap:.5rem;}
+    .pb-icon{background:none;color:var(--ink);border:1px solid var(--border);width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;}
+    /* Tags / Chips */
+    .pt-default{font-family:'Syne Mono',monospace;font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);border:1px solid var(--border);padding:.25rem .6rem;}
+    .pt-blue{font-family:'Syne Mono',monospace;font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--blue);border:1px solid rgba(91,156,246,.3);padding:.25rem .6rem;}
+    .pt-filled{font-family:'Syne Mono',monospace;font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#000;background:var(--blue);padding:.25rem .6rem;}
+    /* Cards */
+    .pc-basic{border:1px solid var(--border);padding:1.25rem;width:100%;}
+    .pc-basic-title{font-size:13px;font-weight:700;margin-bottom:.4rem;}
+    .pc-basic-text{font-size:11px;line-height:1.6;color:rgba(242,237,230,.4);}
+    /* Input */
+    .pi-wrap{border:1px solid var(--border);display:flex;align-items:center;padding:.5rem .75rem;gap:.5rem;width:100%;}
+    .pi-wrap input{background:none;border:none;outline:none;font-family:'Syne Mono',monospace;font-size:9px;letter-spacing:1px;color:var(--ink);width:100%;}
+    .pi-wrap input::placeholder{color:rgba(242,237,230,.2);}
+    .pi-label{font-family:'Syne Mono',monospace;font-size:7px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:.4rem;}
+    /* Badge */
+    .pb-badge{display:inline-flex;align-items:center;gap:.4rem;font-family:'Syne Mono',monospace;font-size:7px;letter-spacing:2px;text-transform:uppercase;padding:.2rem .55rem;}
+    .pb-badge-dot{width:4px;height:4px;border-radius:50%;}
+    .badge-live{color:#4ecb71;border:1px solid rgba(78,203,113,.25);}.badge-live .pb-badge-dot{background:#4ecb71;animation:pulse 2s infinite;}
+    .badge-beta{color:var(--blue);border:1px solid rgba(91,156,246,.25);}.badge-beta .pb-badge-dot{background:var(--blue);}
+    .badge-off{color:var(--muted);border:1px solid var(--border);}.badge-off .pb-badge-dot{background:rgba(242,237,230,.2);}
+    @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+    /* Divider */
+    .pd-line{width:100%;height:1px;background:var(--border);}
+    .pd-gradient{width:100%;height:1px;background:linear-gradient(to right,transparent,var(--blue),transparent);}
+    /* Typography */
+    .ptyp-h1{font-size:32px;font-weight:800;letter-spacing:-1.5px;line-height:.95;}
+    .ptyp-h2{font-size:22px;font-weight:700;letter-spacing:-1px;}
+    .ptyp-mono{font-family:'Syne Mono',monospace;font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);}
+    .ptyp-body{font-size:14px;line-height:1.75;color:rgba(242,237,230,.55);}
+    /* Stat */
+    .pstat{text-align:center;}
+    .pstat-val{font-size:36px;font-weight:800;letter-spacing:-2px;color:var(--blue);}
+    .pstat-lbl{font-family:'Syne Mono',monospace;font-size:8px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-top:.3rem;}
+    /* Avatar */
+    .pav{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,rgba(91,156,246,.4),rgba(91,156,246,.1));display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;}
+    /* Progress */
+    .pprog{width:100%;}
+    .pprog-bar{height:2px;background:var(--border);width:100%;overflow:hidden;margin-top:.5rem;}
+    .pprog-fill{height:100%;background:var(--blue);width:68%;}
+    .pprog-label{display:flex;justify-content:space-between;font-family:'Syne Mono',monospace;font-size:7px;letter-spacing:2px;color:var(--muted);}
+    /* Toggle */
+    .ptoggle{display:flex;align-items:center;gap:.75rem;}
+    .ptoggle-track{width:34px;height:18px;border-radius:9px;border:1px solid var(--blue);background:rgba(91,156,246,.1);position:relative;cursor:pointer;}
+    .ptoggle-thumb{width:12px;height:12px;border-radius:50%;background:var(--blue);position:absolute;top:2px;right:2px;transition:right .2s;}
+    .ptoggle-label{font-family:'Syne Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);}
+    /* COLOR SWATCHES */
+    .pswatches{display:flex;gap:.5rem;flex-wrap:wrap;}
+    .pswatch{width:32px;height:32px;}
+
+    /* BOTTOM BAR */
+    .bottom-bar{position:fixed;bottom:0;left:0;right:0;height:32px;background:rgba(11,11,9,.9);border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 2rem;z-index:50;}
+    .bb-info{font-family:'Syne Mono',monospace;font-size:7px;letter-spacing:2px;color:rgba(242,237,230,.2);}
+
+    @media(max-width:768px){
+      .app-layout{grid-template-columns:1fr;}
+      .sidebar{display:none;}
+      .main-content{padding:1.25rem;}
+      .comp-grid{grid-template-columns:1fr;}
+      .topbar{padding:0 1rem;}
+    }
+  </style>
+</head>
+<body>
+<div id="intro">
+  <div class="intro-logo">PrmBlocks</div>
+  <div class="intro-bar"><div class="intro-fill" id="ibar"></div></div>
+  <div class="intro-num" id="inum">0%</div>
+</div>
+
+<div class="topbar">
+  <div class="tb-left">
+    <a href="games.html" class="tb-back">← Zpet</a>
+    <div class="tb-sep"></div>
+    <div class="tb-logo">Prm<span>Blocks</span></div>
+    <div class="tb-badge">UI KIT</div>
+  </div>
+  <div class="tb-right">
+    <span class="tb-version">v0.1.0-alpha</span>
+  </div>
+</div>
+
+<div class="app-layout">
+  <!-- SIDEBAR NAV -->
+  <aside class="sidebar">
+    <div class="sb-section">
+      <div class="sb-label">Zakladni</div>
+      <div class="sb-item active" onclick="scrollTo('buttons')">Tlacitka<span class="sb-count">4</span></div>
+      <div class="sb-item" onclick="scrollTo('tags')">Tagy &amp; Chipy<span class="sb-count">3</span></div>
+      <div class="sb-item" onclick="scrollTo('badges')">Odznaky<span class="sb-count">3</span></div>
+      <div class="sb-item" onclick="scrollTo('typography')">Typografie<span class="sb-count">4</span></div>
+    </div>
+    <div class="sb-section">
+      <div class="sb-label">Vstupy</div>
+      <div class="sb-item" onclick="scrollTo('inputs')">Textove pole<span class="sb-count">2</span></div>
+      <div class="sb-item" onclick="scrollTo('toggle')">Prepinace</div>
+    </div>
+    <div class="sb-section">
+      <div class="sb-label">Bloky</div>
+      <div class="sb-item" onclick="scrollTo('cards')">Karty</div>
+      <div class="sb-item" onclick="scrollTo('stats')">Statistiky</div>
+      <div class="sb-item" onclick="scrollTo('progress')">Progressbary</div>
+      <div class="sb-item" onclick="scrollTo('dividers')">Oddelovace</div>
+    </div>
+    <div class="sb-section">
+      <div class="sb-label">Ostatni</div>
+      <div class="sb-item" onclick="scrollTo('avatars')">Avatary</div>
+      <div class="sb-item" onclick="scrollTo('colors')">Barvy</div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main-content">
+    <div class="page-hd">
+      <div class="page-hd-top">
+        <div>
+          <h1 class="page-title">PrmBlocks</h1>
+        </div>
+      </div>
+      <p class="page-desc">Minimalni design system pro rychle prototypovani. Vsechny komponenty jsou navrzeny kolem jednoho design tokenu — preciznost, kontrast, minimalismus.</p>
+      <div class="search-bar">
+        <span class="search-icon">⌕</span>
+        <input type="text" placeholder="HLEDAT KOMPONENTU...">
+      </div>
+    </div>
+
+    <!-- BUTTONS -->
+    <div class="comp-section" id="buttons">
+      <div class="cs-header">
+        <span class="cs-title">Tlacitka</span>
+        <div class="cs-line"></div>
+        <span class="cs-count">4 varianty</span>
+      </div>
+      <div class="comp-grid">
+        <div class="comp-card">
+          <button class="copy-btn" onclick="copyCode(this,'pb-primary')">Kopirovat</button>
+          <div class="comp-preview"><button class="pb-primary">Potvrdit</button></div>
+          <div class="comp-name">Primary Button</div>
+          <div class="comp-meta">Hlavni akce / CTA</div>
+        </div>
+        <div class="comp-card">
+          <button class="copy-btn" onclick="copyCode(this,'pb-ghost')">Kopirovat</button>
+          <div class="comp-preview"><button class="pb-ghost">Zrusit</button></div>
+          <div class="comp-name">Ghost Button</div>
+          <div class="comp-meta">Sekundarni akce</div>
+        </div>
+        <div class="comp-card">
+          <button class="copy-btn" onclick="copyCode(this,'pb-text')">Kopirovat</button>
+          <div class="comp-preview"><button class="pb-text">Vice info →</button></div>
+          <div class="comp-name">Text Button</div>
+          <div class="comp-meta">Tertiarni / linky</div>
+        </div>
+        <div class="comp-card">
+          <button class="copy-btn" onclick="copyCode(this,'pb-icon')">Kopirovat</button>
+          <div class="comp-preview"><button class="pb-icon">↗</button></div>
+          <div class="comp-name">Icon Button</div>
+          <div class="comp-meta">Akce bez popisku</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAGS -->
+    <div class="comp-section" id="tags">
+      <div class="cs-header">
+        <span class="cs-title">Tagy &amp; Chipy</span>
+        <div class="cs-line"></div>
+        <span class="cs-count">3 varianty</span>
+      </div>
+      <div class="comp-grid">
+        <div class="comp-card">
+          <div class="comp-preview"><span class="pt-default">Design</span></div>
+          <div class="comp-name">Default Tag</div>
+          <div class="comp-meta">Neutralni kategorizace</div>
+        </div>
+        <div class="comp-card">
+          <div class="comp-preview"><span class="pt-blue">React</span></div>
+          <div class="comp-name">Accent Tag</div>
+          <div class="comp-meta">Zvyraznena kategorie</div>
+        </div>
+        <div class="comp-card">
+          <div class="comp-preview"><span class="pt-filled">TypeScript</span></div>
+          <div class="comp-name">Filled Tag</div>
+          <div class="comp-meta">Plna varianta</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BADGES -->
+    <div class="comp-section" id="badges">
+      <div class="cs-header">
+        <span class="cs-title">Odznaky stavu</span>
+        <div class="cs-line"></div>
+        <span class="cs-count">3 varianty</span>
+      </div>
+      <div class="comp-grid">
+        <div class="comp-card">
+          <div class="comp-preview"><span class="pb-badge badge-live"><span class="pb-badge-dot"></span>Live</span></div>
+          <div class="comp-name">Live Badge</div>
+          <div class="comp-meta">Aktivni stav — pulzuje</div>
+        </div>
+        <div class="comp-card">
+          <div class="comp-preview"><span class="pb-badge badge-beta"><span class="pb-badge-dot"></span>Beta</span></div>
+          <div class="comp-name">Beta Badge</div>
+          <div class="comp-meta">Verze v testovani</div>
+        </div>
+        <div class="comp-card">
+          <div class="comp-preview"><span class="pb-badge badge-off"><span class="pb-badge-dot"></span>Offline</span></div>
+          <div class="comp-name">Offline Badge</div>
+          <div class="comp-meta">Neaktivni stav</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TYPOGRAPHY -->
+    <div class="comp-section" id="typography">
+      <div class="cs-header">
+        <span class="cs-title">Typografie</span>
+        <div class="cs-line"></div>
+        <span class="cs-count">4 stupne</span>
+      </div>
+      <div class="comp-grid">
+        <div class="comp-card">
+          <div class="comp-preview"><div class="ptyp-h1">Heading</div></div>
+          <div class="comp-name">H1 — Display</div>
+          <div class="comp-meta">Syne 800 / -1.5px</div>
+        </div>
+        <div class="comp-card">
+          <div class="comp-preview"><div class="ptyp-h2">Nadpis sekce</div></div>
+          <div class="comp-name">H2 — Section</div>
+          <div class="comp-meta">Syne 700 / -1px</div>
+        </div>
+        <div class="comp-card">
+          <div class="comp-preview"><div class="ptyp-mono">Popisek / Label</div></div>
+          <div class="comp-name">Mono Label</div>
+          <div class="comp-meta">Syne Mono / uppercase</div>
+        </div>
+        <div class="comp-card">
+          <div class="comp-preview"><div class="ptyp-body">Toto je ukazka bezneho textu pro odstavce. Pouziva se pro popis komponent a obsahu stranky.</div></div>
+          <div class="comp-name">Body Text</div>
+          <div class="comp-meta">Syne 400 / 1.75 vyska</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- INPUTS -->
+    <div class="comp-section" id="inputs">
+      <div class="cs-header">
+        <span class="cs-title">Textova pole</span>
+        <div class="cs-line"></div>
+        <span class="cs-count">2 varianty</span>
+      </div>
+      <div class="comp-grid">
+        <div class="comp-card">
+          <div class="comp-preview" style="flex-direction:column;align-items:flex-start;gap:.5rem;width:100%">
+            <div class="pi-label">Email</div>
+            <div class="pi-wrap" style="width:100%"><input type="text" placeholder="vas@email.cz"></div>
+          </div>
+          <div class="comp-name">Text Input</div>
+          <div class="comp-meta">S popiskem</div>
+        </div>
+        <div class="comp-card">
+          <div class="comp-preview" style="flex-direction:column;align-items:flex-start;gap:.5rem;width:100%">
+            <div class="pi-label">Vyhledavani</div>
+            <div class="pi-wrap" style="width:100%"><span style="font-size:10px;color:var(--muted)">⌕</span><input type="text" placeholder="HLEDAT..."></div>
+          </div>
+          <div class="comp-name">Search Input</div>
+          <div class="comp-meta">S ikonou</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TOGGLE -->
+    <div class="comp-section" id="toggle">
+      <div class="cs-header">
+        <span class="cs-title">Prepinace</span>
+        <div class="cs-line"></div>
+        <span class="cs-count">1 varianta</span>
+      </div>
+      <div class="comp-grid">
+        <div class="comp-card">
+          <div class="comp-preview">
+            <div class="ptoggle">
+              <div class="ptoggle-track" onclick="this.querySelector('.ptoggle-thumb').style.right=this.querySelector('.ptoggle-thumb').style.right==='2px'?'16px':'2px'">
+                <div class="ptoggle-thumb"></div>
+              </div>
+              <span class="ptoggle-label">Zapnuto</span>
+            </div>
+          </div>
+          <div class="comp-name">Toggle Switch</div>
+          <div class="comp-meta">Klikatelny</div>
+        </div>
+        <div class="comp-card" style="opacity:.4;">
+          <div class="comp-preview">
+            <div class="ptoggle">
+              <div class="ptoggle-track" style="border-color:var(--border);background:none">
+                <div class="ptoggle-thumb" style="background:rgba(242,237,230,.2);right:16px"></div>
+              </div>
+              <span class="ptoggle-label">Vypnuto</span>
+            </div>
+          </div>
+          <div class="comp-name">Toggle Switch</div>
+          <div class="comp-meta">Neaktivni stav</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CARDS -->
+    <div class="comp-section" id="cards">
+      <div class="cs-header">
+        <span class="cs-title">Karty</span>
+        <div class="cs-line"></div>
+        <span class="cs-count">1 varianta</span>
+      </div>
+      <div class="comp-grid">
+        <div class="comp-card">
+          <div class="comp-preview" style="padding:.75rem">
+            <div class="pc-basic">
+              <div class="pc-basic-title">Nazev karty</div>
+              <div class="pc-basic-text">Kratky popis obsahu karty. Pouzivat pro strukturovany obsah.</div>
+            </div>
+          </div>
+          <div class="comp-name">Basic Card</div>
+          <div class="comp-meta">Oramovana karta</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STATS -->
+    <div class="comp-section" id="stats">
+      <div class="cs-header">
+        <span class="cs-title">Statistiky</span>
+        <div class="cs-line"></div>
+      </div>
+      <div class="comp-grid">
+        <div class="comp-card">
+          <div class="comp-preview">
+            <div class="pstat">
+              <div class="pstat-val">4.8</div>
+              <div class="pstat-lbl">Hodnoceni</div>
+            </div>
+          </div>
+          <div class="comp-name">Stat Block</div>
+          <div class="comp-meta">Cislo + popis</div>
+        </div>
+        <div class="comp-card">
+          <div class="comp-preview">
+            <div class="pstat">
+              <div class="pstat-val" style="color:var(--ink)">127</div>
+              <div class="pstat-lbl">Polozek</div>
+            </div>
+          </div>
+          <div class="comp-name">Stat Block</div>
+          <div class="comp-meta">Neutralni varianta</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROGRESS -->
+    <div class="comp-section" id="progress">
+      <div class="cs-header">
+        <span class="cs-title">Progressbary</span>
+        <div class="cs-line"></div>
+      </div>
+      <div class="comp-grid">
+        <div class="comp-card">
+          <div class="comp-preview" style="width:100%;flex-direction:column">
+            <div class="pprog">
+              <div class="pprog-label"><span>Progress</span><span>68%</span></div>
+              <div class="pprog-bar"><div class="pprog-fill"></div></div>
+            </div>
+          </div>
+          <div class="comp-name">Progress Bar</div>
+          <div class="comp-meta">Horizontalni prubeh</div>
+        </div>
+        <div class="comp-card">
+          <div class="comp-preview" style="width:100%;flex-direction:column;gap:.75rem">
+            <div class="pprog">
+              <div class="pprog-label"><span>Design</span><span>90%</span></div>
+              <div class="pprog-bar"><div class="pprog-fill" style="width:90%"></div></div>
+            </div>
+            <div class="pprog">
+              <div class="pprog-label"><span>Frontend</span><span>75%</span></div>
+              <div class="pprog-bar"><div class="pprog-fill" style="width:75%"></div></div>
+            </div>
+            <div class="pprog">
+              <div class="pprog-label"><span>Backend</span><span>42%</span></div>
+              <div class="pprog-bar"><div class="pprog-fill" style="width:42%"></div></div>
+            </div>
+          </div>
+          <div class="comp-name">Progress List</div>
+          <div class="comp-meta">Skupinovy progress</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DIVIDERS -->
+    <div class="comp-section" id="dividers">
+      <div class="cs-header">
+        <span class="cs-title">Oddelovace</span>
+        <div class="cs-line"></div>
+      </div>
+      <div class="comp-grid">
+        <div class="comp-card">
+          <div class="comp-preview" style="flex-direction:column;gap:1.5rem;width:100%">
+            <div class="pd-line"></div>
+          </div>
+          <div class="comp-name">Line Divider</div>
+          <div class="comp-meta">Standard</div>
+        </div>
+        <div class="comp-card">
+          <div class="comp-preview" style="flex-direction:column;gap:1.5rem;width:100%">
+            <div class="pd-gradient"></div>
+          </div>
+          <div class="comp-name">Gradient Divider</div>
+          <div class="comp-meta">Accent varianta</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AVATARS -->
+    <div class="comp-section" id="avatars">
+      <div class="cs-header">
+        <span class="cs-title">Avatary</span>
+        <div class="cs-line"></div>
+      </div>
+      <div class="comp-grid">
+        <div class="comp-card">
+          <div class="comp-preview" style="gap:1rem">
+            <div class="pav" style="width:48px;height:48px;font-size:16px">PV</div>
+            <div class="pav">JN</div>
+            <div class="pav" style="width:28px;height:28px;font-size:10px">TH</div>
+          </div>
+          <div class="comp-name">Avatar — 3 velikosti</div>
+          <div class="comp-meta">Inicialky uzivatele</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- COLORS -->
+    <div class="comp-section" id="colors">
+      <div class="cs-header">
+        <span class="cs-title">Design tokeny — Barvy</span>
+        <div class="cs-line"></div>
+      </div>
+      <div class="comp-grid">
+        <div class="comp-card">
+          <div class="comp-preview">
+            <div class="pswatches">
+              <div class="pswatch" style="background:#0b0b09;border:1px solid var(--border)" title="--bg"></div>
+              <div class="pswatch" style="background:#f2ede6" title="--ink"></div>
+              <div class="pswatch" style="background:#5b9cf6" title="--blue"></div>
+              <div class="pswatch" style="background:#4ecb71" title="--green"></div>
+              <div class="pswatch" style="background:#e8479a" title="--pink"></div>
+              <div class="pswatch" style="background:#e8401f" title="--red"></div>
+              <div class="pswatch" style="background:#f5c842" title="--yellow"></div>
+            </div>
+          </div>
+          <div class="comp-name">Paleta barev</div>
+          <div class="comp-meta">CSS custom properties</div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<div class="bottom-bar">
+  <span class="bb-info">PrmBlocks v0.1.0 — prm visual 2026</span>
+  <span class="bb-info">22 komponent</span>
+</div>
+
+<script>
+// INTRO
+const introEl=document.getElementById('intro'),ibar=document.getElementById('ibar'),inum=document.getElementById('inum');
+let prog=0;
+const iv=setInterval(()=>{prog+=Math.random()*8+3;if(prog>=100){prog=100;clearInterval(iv);setTimeout(()=>introEl.classList.add('out'),300);}ibar.style.width=prog+'%';inum.textContent=Math.floor(prog)+'%';},35);
+
+// SIDEBAR ACTIVE
+document.querySelectorAll('.sb-item').forEach(b=>{b.addEventListener('click',()=>{document.querySelectorAll('.sb-item').forEach(x=>x.classList.remove('active'));b.classList.add('active');});});
+
+// SMOOTH SCROLL TO SECTION
+function scrollTo(id){
+  const el=document.getElementById(id);
+  if(el)el.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+// COPY CODE
+function copyCode(btn,cls){
+  btn.textContent='Kopirovano!';btn.classList.add('copied');
+  setTimeout(()=>{btn.textContent='Kopirovat';btn.classList.remove('copied');},2000);
+}
+
+// SEARCH FILTER
+document.querySelector('.search-bar input').addEventListener('input',function(){
+  const q=this.value.toLowerCase();
+  document.querySelectorAll('.comp-section').forEach(s=>{
+    const title=s.querySelector('.cs-title').textContent.toLowerCase();
+    const cards=[...s.querySelectorAll('.comp-name')].map(c=>c.textContent.toLowerCase());
+    const match=title.includes(q)||cards.some(c=>c.includes(q))||q==='';
+    s.style.display=match?'':'none';
+  });
+});
+</script>
+</body>
+</html>

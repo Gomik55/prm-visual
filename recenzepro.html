@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RecenzePro — prm visual</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;700;800&family=Syne+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#0b0b09;--ink:#f2ede6;--muted:rgba(242,237,230,0.32);--blue:#5b9cf6;--border:rgba(242,237,230,0.07);--green:#4ecb71;--yellow:#f5c842;--red:#e8401f;}
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+    html{font-size:16px;overflow-x:hidden;}
+    body{background:var(--bg);color:var(--ink);font-family:'Syne',sans-serif;overflow-x:hidden;}
+    body::after{content:'';position:fixed;inset:0;z-index:500;pointer-events:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");opacity:.015;mix-blend-mode:overlay;}
+    /* INTRO */
+    #intro{position:fixed;inset:0;z-index:8000;background:var(--bg);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:2rem;transition:opacity .9s ease,visibility .9s ease;}
+    #intro.out{opacity:0;visibility:hidden;pointer-events:none;}
+    .intro-logo{font-size:11px;font-weight:700;letter-spacing:10px;text-transform:uppercase;color:rgba(242,237,230,.15);animation:flicker 2.2s ease infinite;}
+    @keyframes flicker{0%,100%{opacity:1;}47%{opacity:1;}50%{opacity:.3;}53%{opacity:1;}}
+    .intro-bar{width:160px;height:1px;background:var(--border);overflow:hidden;}
+    .intro-fill{height:100%;width:0%;background:linear-gradient(to right,var(--blue),var(--ink));}
+    .intro-num{font-family:'Syne Mono',monospace;font-size:10px;letter-spacing:3px;color:rgba(242,237,230,.2);}
+    /* TOPBAR */
+    .topbar{position:fixed;top:0;left:0;right:0;z-index:100;height:52px;background:rgba(11,11,9,.95);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 2rem;}
+    .tb-left{display:flex;align-items:center;gap:1.5rem;}
+    .tb-back{font-family:'Syne Mono',monospace;font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);text-decoration:none;transition:color .25s;display:flex;align-items:center;gap:.5rem;}
+    .tb-back:hover{color:var(--ink);}
+    .tb-sep{width:1px;height:16px;background:var(--border);}
+    .tb-logo{font-size:11px;font-weight:700;letter-spacing:4px;text-transform:uppercase;color:var(--blue);}
+    .tb-badge{font-family:'Syne Mono',monospace;font-size:7px;letter-spacing:2px;text-transform:uppercase;color:rgba(91,156,246,.6);border:1px solid rgba(91,156,246,.25);padding:.2rem .5rem;}
+    .tb-right{display:flex;align-items:center;gap:1rem;}
+    .tb-btn{font-family:'Syne Mono',monospace;font-size:8px;letter-spacing:2px;text-transform:uppercase;padding:.4rem 1rem;border:1px solid var(--border);color:var(--muted);background:none;cursor:pointer;transition:all .25s;}
+    .tb-btn:hover{border-color:var(--blue);color:var(--blue);}
+    .tb-btn.primary{background:var(--blue);color:#000;border-color:var(--blue);font-weight:700;}
+    .tb-btn.primary:hover{background:#7ab3f8;}
+    /* LAYOUT */
+    .app-layout{display:grid;grid-template-columns:220px 1fr;min-height:100vh;padding-top:52px;}
+    /* SIDEBAR */
+    .sidebar{border-right:1px solid var(--border);padding:2rem 0;position:sticky;top:52px;height:calc(100vh - 52px);overflow-y:auto;}
+    .sb-section{margin-bottom:2rem;}
+    .sb-label{font-family:'Syne Mono',monospace;font-size:7px;letter-spacing:3px;text-transform:uppercase;color:rgba(242,237,230,.2);padding:0 1.5rem;margin-bottom:.75rem;}
+    .sb-item{display:flex;align-items:center;gap:.75rem;padding:.6rem 1.5rem;font-family:'Syne Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);cursor:pointer;transition:all .2s;border-left:2px solid transparent;}
+    .sb-item:hover{color:var(--ink);background:rgba(255,255,255,.025);}
+    .sb-item.active{color:var(--blue);border-left-color:var(--blue);background:rgba(91,156,246,.05);}
+    .sb-icon{width:14px;height:14px;opacity:.6;}
+    .sb-item.active .sb-icon{opacity:1;}
+    .sb-count{margin-left:auto;font-size:7px;background:rgba(91,156,246,.15);color:var(--blue);padding:.15rem .4rem;border-radius:2px;}
+    /* STATS BAR */
+    .stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;border-bottom:1px solid var(--border);background:var(--border);}
+    .stat-box{background:var(--bg);padding:1.5rem 2rem;}
+    .stat-val{font-size:clamp(22px,2.5vw,32px);font-weight:800;letter-spacing:-1px;}
+    .stat-lbl{font-family:'Syne Mono',monospace;font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-top:.3rem;}
+    .stat-delta{font-family:'Syne Mono',monospace;font-size:8px;color:var(--green);margin-top:.3rem;}
+    /* MAIN CONTENT */
+    .main-content{padding:2rem;}
+    .section-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;}
+    .section-hd h2{font-size:clamp(16px,1.8vw,22px);font-weight:700;letter-spacing:-.5px;}
+    .filter-row{display:flex;gap:.5rem;}
+    .filter-btn{font-family:'Syne Mono',monospace;font-size:7px;letter-spacing:2px;text-transform:uppercase;padding:.3rem .8rem;border:1px solid var(--border);color:var(--muted);background:none;cursor:pointer;transition:all .2s;}
+    .filter-btn:hover,.filter-btn.on{border-color:var(--blue);color:var(--blue);}
+    /* REVIEWS */
+    .review-list{display:flex;flex-direction:column;gap:1px;}
+    .review-card{background:rgba(255,255,255,.02);border:1px solid var(--border);padding:1.5rem;transition:border-color .25s;}
+    .review-card:hover{border-color:rgba(91,156,246,.2);}
+    .rc-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;}
+    .rc-meta{display:flex;align-items:center;gap:.75rem;}
+    .rc-avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,rgba(91,156,246,.4),rgba(91,156,246,.1));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;}
+    .rc-name{font-size:13px;font-weight:600;}
+    .rc-date{font-family:'Syne Mono',monospace;font-size:8px;letter-spacing:1px;color:var(--muted);}
+    .rc-stars{display:flex;gap:2px;}
+    .star{color:var(--yellow);font-size:12px;}
+    .star.empty{color:rgba(242,237,230,.15);}
+    .rc-source{font-family:'Syne Mono',monospace;font-size:7px;letter-spacing:2px;text-transform:uppercase;padding:.2rem .5rem;border:1px solid var(--border);color:var(--muted);}
+    .rc-text{font-size:13px;line-height:1.7;color:rgba(242,237,230,.65);margin-bottom:1.25rem;}
+    .rc-actions{display:flex;gap:.75rem;align-items:center;}
+    .rc-reply-btn{font-family:'Syne Mono',monospace;font-size:8px;letter-spacing:2px;text-transform:uppercase;padding:.35rem .9rem;border:1px solid var(--border);color:var(--muted);background:none;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:.4rem;}
+    .rc-reply-btn:hover,.rc-reply-btn.ai{border-color:var(--blue);color:var(--blue);}
+    .rc-reply-btn.ai{background:rgba(91,156,246,.08);}
+    .rc-sentiment{font-family:'Syne Mono',monospace;font-size:7px;letter-spacing:2px;text-transform:uppercase;padding:.2rem .5rem;margin-left:auto;}
+    .sent-pos{color:var(--green);border:1px solid rgba(78,203,113,.2);}
+    .sent-neg{color:var(--red);border:1px solid rgba(232,64,31,.2);}
+    .sent-neu{color:var(--muted);border:1px solid var(--border);}
+    /* AI RESPONSE PANEL */
+    .ai-panel{display:none;margin-top:1rem;border:1px solid rgba(91,156,246,.2);background:rgba(91,156,246,.04);padding:1.25rem;}
+    .ai-panel.open{display:block;}
+    .ai-label{font-family:'Syne Mono',monospace;font-size:8px;letter-spacing:3px;text-transform:uppercase;color:var(--blue);margin-bottom:.75rem;display:flex;align-items:center;gap:.5rem;}
+    .ai-label::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--blue);animation:throb 2s ease infinite;}
+    @keyframes throb{0%,100%{box-shadow:0 0 0 0 rgba(91,156,246,.5);}50%{box-shadow:0 0 0 4px rgba(91,156,246,0);}}
+    .ai-text{font-size:13px;line-height:1.75;color:rgba(242,237,230,.75);margin-bottom:1rem;}
+    .ai-actions{display:flex;gap:.5rem;}
+    .ai-act{font-family:'Syne Mono',monospace;font-size:7px;letter-spacing:2px;text-transform:uppercase;padding:.3rem .7rem;border:1px solid var(--border);color:var(--muted);background:none;cursor:pointer;transition:all .2s;}
+    .ai-act:hover{border-color:var(--blue);color:var(--blue);}
+    .ai-act.send{background:var(--blue);color:#000;border-color:var(--blue);font-weight:700;}
+    /* RESPONDED badge */
+    .rc-replied{font-family:'Syne Mono',monospace;font-size:7px;letter-spacing:2px;text-transform:uppercase;color:var(--green);border:1px solid rgba(78,203,113,.25);padding:.2rem .5rem;}
+    @media(max-width:768px){
+      .app-layout{grid-template-columns:1fr;}
+      .sidebar{display:none;}
+      .stats-bar{grid-template-columns:1fr 1fr;}
+      .topbar{padding:0 1rem;}
+      .tb-right .tb-btn:not(.primary){display:none;}
+      .main-content{padding:1rem;}
+    }
+  </style>
+</head>
+<body>
+<div id="intro">
+  <div class="intro-logo">RecenzePro</div>
+  <div class="intro-bar"><div class="intro-fill" id="ibar"></div></div>
+  <div class="intro-num" id="inum">0%</div>
+</div>
+
+<div class="topbar">
+  <div class="tb-left">
+    <a href="games.html" class="tb-back">← Zpet</a>
+    <div class="tb-sep"></div>
+    <div class="tb-logo">RecenzePro</div>
+    <div class="tb-badge">BETA</div>
+  </div>
+  <div class="tb-right">
+    <button class="tb-btn">Export</button>
+    <button class="tb-btn primary">+ Pridat pobocku</button>
+  </div>
+</div>
+
+<div class="app-layout">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sb-section">
+      <div class="sb-label">Prehledy</div>
+      <div class="sb-item active"><span>📊</span>Dashboard<span class="sb-count">12</span></div>
+      <div class="sb-item"><span>⭐</span>Recenze<span class="sb-count">127</span></div>
+      <div class="sb-item"><span>🤖</span>AI Odpovedi</div>
+      <div class="sb-item"><span>📈</span>Analytika</div>
+    </div>
+    <div class="sb-section">
+      <div class="sb-label">Pobocky</div>
+      <div class="sb-item"><span>📍</span>Hlavni provozovna</div>
+      <div class="sb-item"><span>📍</span>Pobocka Brno</div>
+      <div class="sb-item"><span>+</span>Pridat pobocku</div>
+    </div>
+    <div class="sb-section">
+      <div class="sb-label">Nastaveni</div>
+      <div class="sb-item"><span>🔔</span>Notifikace</div>
+      <div class="sb-item"><span>⚙️</span>Nastaveni</div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main>
+    <!-- STATS -->
+    <div class="stats-bar">
+      <div class="stat-box">
+        <div class="stat-val">4.8</div>
+        <div class="stat-lbl">Prumerne hodnoceni</div>
+        <div class="stat-delta">↑ +0.2 tento mesic</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-val">127</div>
+        <div class="stat-lbl">Celkem recenzi</div>
+        <div class="stat-delta">↑ +14 tento mesic</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-val">89%</div>
+        <div class="stat-lbl">Kladnych recenzi</div>
+        <div class="stat-delta">↑ +3% vs minuly mesic</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-val">24h</div>
+        <div class="stat-lbl">Prumerna odpoved</div>
+        <div class="stat-delta">↓ -6h zlepseni</div>
+      </div>
+    </div>
+
+    <!-- REVIEW LIST -->
+    <div class="main-content">
+      <div class="section-hd">
+        <h2>Nove recenze</h2>
+        <div class="filter-row">
+          <button class="filter-btn on">Vsechny</button>
+          <button class="filter-btn">Google</button>
+          <button class="filter-btn">TripAdvisor</button>
+          <button class="filter-btn">Bez odpovedi</button>
+        </div>
+      </div>
+      <div class="review-list" id="rlist"></div>
+    </div>
+  </main>
+</div>
+
+<script>
+// INTRO
+const introEl=document.getElementById('intro'),ibar=document.getElementById('ibar'),inum=document.getElementById('inum');
+let prog=0;
+const iv=setInterval(()=>{prog+=Math.random()*8+3;if(prog>=100){prog=100;clearInterval(iv);setTimeout(()=>introEl.classList.add('out'),300);}ibar.style.width=prog+'%';inum.textContent=Math.floor(prog)+'%';},35);
+
+// FILTER BUTTONS
+document.querySelectorAll('.filter-btn').forEach(b=>{b.addEventListener('click',()=>{document.querySelectorAll('.filter-btn').forEach(x=>x.classList.remove('on'));b.classList.add('on');});});
+document.querySelectorAll('.sb-item').forEach(b=>{b.addEventListener('click',()=>{document.querySelectorAll('.sb-item').forEach(x=>x.classList.remove('active'));b.classList.add('active');});});
+
+// REVIEWS DATA
+const reviews=[
+  {name:'Jana Novakova',avatar:'JN',stars:5,date:'pred 2 hodinami',source:'Google',text:'Absolutne skvela zkusenost! Personál byl velmi priatelsky a profesionalni. Urcite se vratim a doporucim vsem znamym.',sentiment:'pos',replied:false,aiResponse:'Dekujeme za vase krasne hodnoceni, Jano! Tesime se na vasi dalsi navstevu a vazime si vasi doporuceni.'},
+  {name:'Tomas Horak',avatar:'TH',stars:2,date:'pred 5 hodinami',source:'TripAdvisor',text:'Cakal jsem dyl nez bylo nutne. Obsluha byla priatelska, ale organizace nechapu. Mohlo to byt lepsi.',sentiment:'neg',replied:false,aiResponse:'Omlouvame se za neprijemnosti, Tomasi. Vase zpetna vazba je pro nas velmi dulezita a budeme pracovat na zlepseni cekaci doby. Rati vam kompenzujeme tento zazatek.'},
+  {name:'Marie Svobodova',avatar:'MS',stars:5,date:'pred 1 dnem',source:'Google',text:'Fantasticka kvalita a skvely servis. Vsechno probehlo presne jak bylo domluveno. Profesionalni a spolehlivy.',sentiment:'pos',replied:true,aiResponse:''},
+  {name:'Petr Kralik',avatar:'PK',stars:4,date:'pred 2 dny',source:'Google',text:'Celkove dobry zazatek. Maly problem s parkovanim, ale jinak vsechno v poradku. Pracovnici jsou kompetentni.',sentiment:'pos',replied:false,aiResponse:'Dekujeme za vase hodnoceni, Petre! Mrzis nas problem s parkovanim - pracujeme na jeho reseni. Jsme radi, ze jste byl spokojen s nasimi pracovniky.'},
+  {name:'Eva Blahova',avatar:'EB',stars:1,date:'pred 3 dny',source:'TripAdvisor',text:'Zklamani. Kvalita neodpovida cene. Reklamace nebyla resena spravne. Nedoporucuji.',sentiment:'neg',replied:false,aiResponse:'Velmi se omlouvame za vase zklamani, Evo. Mrzis nas, ze reklamace nebyla vyresena k vasemu uspokojeni. Prosime vas, kontaktujte nas primo na contact@prmvisual.fun a situaci okamzite napravime.'},
+];
+
+function renderReviews(){
+  const rlist=document.getElementById('rlist');
+  rlist.innerHTML=reviews.map((r,i)=>`
+    <div class="review-card">
+      <div class="rc-top">
+        <div class="rc-meta">
+          <div class="rc-avatar">${r.avatar}</div>
+          <div>
+            <div class="rc-name">${r.name}</div>
+            <div class="rc-date">${r.date}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:.75rem">
+          <div class="rc-stars">${[1,2,3,4,5].map(s=>`<span class="star${s>r.stars?' empty':''}">${s<=r.stars?'★':'☆'}</span>`).join('')}</div>
+          <div class="rc-source">${r.source}</div>
+        </div>
+      </div>
+      <div class="rc-text">${r.text}</div>
+      <div class="rc-actions">
+        ${r.replied
+          ? `<span class="rc-replied">✓ Odpovedeno</span>`
+          : `<button class="rc-reply-btn" onclick="toggleAI(${i})">Odpovedet</button>
+             <button class="rc-reply-btn ai" onclick="toggleAI(${i},true)">🤖 AI Odpoved</button>`
+        }
+        <span class="rc-sentiment ${r.sentiment==='pos'?'sent-pos':r.sentiment==='neg'?'sent-neg':'sent-neu'}">${r.sentiment==='pos'?'Pozitivni':r.sentiment==='neg'?'Negativni':'Neutralni'}</span>
+      </div>
+      <div class="ai-panel" id="ai-${i}">
+        <div class="ai-label">AI navrzena odpoved</div>
+        <div class="ai-text">${r.aiResponse}</div>
+        <div class="ai-actions">
+          <button class="ai-act">Upravit</button>
+          <button class="ai-act">Regenerovat</button>
+          <button class="ai-act send" onclick="markReplied(${i})">Odeslat odpoved</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function toggleAI(i,show){
+  const panel=document.getElementById('ai-'+i);
+  if(show||!panel.classList.contains('open')){panel.classList.add('open');}
+  else{panel.classList.remove('open');}
+}
+function markReplied(i){
+  reviews[i].replied=true;
+  renderReviews();
+}
+renderReviews();
+</script>
+</body>
+</html>
