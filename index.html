@@ -332,7 +332,7 @@ const ME = { id: "me", title: "Přemek Kosař", kind: "Web developer & designer 
 // Order: where it started (photo & video), the studio, a client, my own brand, an experiment, and the games last (a side hobby).
 const WORK = [
   {
-    id: "photo", title: "Photo & Video", kind: "Photo · Video · Graphics", hue: "#e8e2d6", status: "Ongoing",
+    id: "photo", title: "photo & video", kind: "Photo · Video · Graphics", hue: "#e8e2d6", status: "Ongoing",
     lede: "Where it all started: graphics, photo and video since 2017.",
     body: "First paid jobs at eleven, and a camera in hand ever since: motorsport and cars, macro, animals, landscapes. Shoots, edits and graphics for brands and local businesses. A first selection is on the table, with more to come.",
     did: ["Photography and retouching", "Video shooting and editing", "Graphics for social media"],
@@ -1981,6 +1981,7 @@ function close() {
   if (gal.phase) { galClose(); lastInput = performance.now(); focusIfKeyboard(returnFocus); return; }
   if (r.item !== ME) setTarget(r.fx, r.fy);
   lastInput = performance.now();
+  kick();                                            // the portrait and the big lens always have to animate back
   focusIfKeyboard(returnFocus);
 }
 
