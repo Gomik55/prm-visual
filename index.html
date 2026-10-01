@@ -149,7 +149,7 @@
   .facts { display: grid; gap: 0; margin: 0; }
   .facts > div { display: grid; grid-template-columns: 96px 1fr; gap: 14px; padding-block: 13px; border-top: 1px solid var(--line); }
   .facts dt { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); padding-top: 3px; }
-  .facts dd { margin: 0; font-size: 14.5px; }
+  .facts dd { margin: 0; font-size: 14.5px; text-wrap: pretty; }
   .facts ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chips span { font-family: var(--mono); font-size: 11.5px; padding: 4px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.07); }
@@ -184,7 +184,11 @@
     position: absolute; left: 50%; transform: translateX(-50%);
     font-size: 11.5px; font-weight: 500; letter-spacing: 0; color: var(--dim);
   }
-  .site video { display: block; width: 100%; height: auto; aspect-ratio: 960 / 574; object-fit: cover; background: #0a0a0b; cursor: pointer; }
+  .site-view { position: relative; aspect-ratio: 960 / 574; transform: translateZ(0); }
+  .site video, .site-poster { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; }
+  .site video { background: #0a0a0b; cursor: pointer; transform: translateZ(0); }
+  .site-poster { pointer-events: none; transition: opacity .35s ease; }
+  .site.live .site-poster { opacity: 0; }
   .site::after {
     content: ""; position: absolute; right: 10px; bottom: 10px; width: 30px; height: 30px; border-radius: 50%;
     background: rgba(20, 20, 22, 0.66) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5.5 3.8v8.4L12 8z' fill='%23f2f2ef'/%3E%3C/svg%3E") center / 14px no-repeat;
@@ -225,6 +229,7 @@
   @keyframes pop { from { transform: translateX(-50%) scale(.4); opacity: 0; } }
   #index ol { list-style: none; margin: 0; padding: 0; }
   #index li { border-top: 1px solid var(--line); }
+  #index li:first-child { border-top: 0; }
   #index button {
     width: 100%; text-align: left;
     display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 24px;
@@ -1007,48 +1012,27 @@ const G = {
 function nameWidth(c, text, f) { c.font = `600 ${f}px ${FONT}`; spacing(c, "-0.05em"); const w = c.measureText(text).width; spacing(c, "0px"); return w; }
 function supWidth(c, text, ms) { c.font = `500 ${ms}px ${MONO}`; spacing(c, "0.08em"); const w = c.measureText(text).width; spacing(c, "0px"); return w; }
 
-// greedy line breaking; a name and its preview stay together unless the screen is too narrow
-function flow(f, availW, split) {
-  const c = fctx; c.setTransform(1, 0, 0, 1, 0, 0);
-  const gap = f * 0.3, glue = f * 0.16;
-  const ms = Math.max(9, Math.min(13, f * 0.1));
-  const lines = [[]]; let x = 0, widest = 0;
-  const push = (kind, u, w) => { lines[lines.length - 1].push({ kind, u, x, w }); x += w; };
-  const newLine = () => { lines.push([]); x = 0; };
-  WORK.forEach(item => {
-    const nameW = nameWidth(c, item.title, f);
-    const th = f * 0.66, tw = th * 1.72, dot = f * 0.17, dgap = f * 0.15;
-    const u = { item, nameW, th, tw, dot, dgap, a: nameW, b: tw + dgap + dot };
-    widest = Math.max(widest, u.a + glue + u.b);
-    const lead = x > 0 ? gap : 0;
-    if (x + lead + u.a + glue + u.b <= availW) { x += lead; push("name", u, u.a); x += glue; push("thumb", u, u.b); return; }
-    if (split && x + lead + u.a <= availW) { x += lead; push("name", u, u.a); newLine(); push("thumb", u, u.b); return; }
-    if (x > 0) newLine();
-    push("name", u, u.a);
-    if (u.a + glue + u.b <= availW) { x += glue; push("thumb", u, u.b); } else { newLine(); push("thumb", u, u.b); }
-  });
-  return { lines: lines.filter(l => l.length), widest };
-}
-
-// desktop: a two-column table, as large as the screen allows. Names in one straight column, previews in a
+// a two-column table, as large as the screen allows. Names in one straight column, previews in a
 // second straight column right after the longest name, and the whole block centred, so both margins match.
-function layoutWide() {
-  const side = Math.max(28, Math.round(W * 0.03));
-  const top = 88, bottom = 72;
+// Phones use the same table, packed a little tighter and centred vertically.
+function layoutWide(narrow = false) {
+  const side = narrow ? 18 : Math.max(28, Math.round(W * 0.03));
+  const top = 88, bottom = narrow ? 76 : 72;
   const availW = W - side * 2, availH = H - top - bottom, n = WORK.length, c = fctx;
   c.setTransform(1, 0, 0, 1, 0, 0);
-  const TH = 0.86, LF = 1.08, GAP = 0.42;           // preview height, line pitch and column gap, in type sizes
+  const TH = narrow ? 0.74 : 0.86, LF = narrow ? 1.5 : 1.08, GAP = narrow ? 0.3 : 0.42;   // preview height, line pitch and column gap, in type sizes
   const nameMax = Math.max(...WORK.map(it => nameWidth(c, it.title, 100))) / 100;
   const blockAt = (f) => f * (nameMax + GAP + TH * 1.72 + 0.16 + 0.15);
   let f = Math.min(availH / (n * LF), 240);
   f = Math.min(f, availW / blockAt(1));
-  const cap = f * 0.71, lh = availH / n, bw = blockAt(f), x0 = side + (availW - bw) / 2;
+  const cap = f * 0.71, lh = narrow ? Math.min(availH / n, f * 1.7) : availH / n, bw = blockAt(f), x0 = side + (availW - bw) / 2;
+  const y0 = top + (availH - lh * n) / 2;
   const colB = x0 + f * (nameMax + GAP);
   rows = [];
   WORK.forEach((item, i) => {
     const nameW = nameWidth(c, item.title, f), th = f * TH, tw = th * 1.72, dot = f * 0.15, dgap = f * 0.16;
     const u = { item, nameW, th, tw, dot, dgap, a: nameW, b: tw + dgap + dot };
-    const base = top + i * lh + lh * 0.5 + cap * 0.5, mid = base - cap * 0.5;
+    const base = y0 + i * lh + lh * 0.5 + cap * 0.5, mid = base - cap * 0.5;
     const r = { item, u, f, cap, rects: [], wide: true };
     r.name = { x: x0, base, w: nameW };
     r.thumb = { x: colB, y: mid - th / 2, w: tw, h: th };
@@ -1060,64 +1044,7 @@ function layoutWide() {
   });
 }
 
-function layout() {
-  const narrow = W < 700;
-  if (!narrow) return layoutWide();
-  const side = narrow ? 16 : Math.max(24, Math.round(W * 0.03));
-  const top = narrow ? 88 : 104, bottom = narrow ? 76 : 88;
-  const availW = W - side * 2, availH = H - top - bottom;
-  // largest type size whose flow still fits the screen (the v7 fitText idea, applied to the whole block)
-  let lo = 18, hi = Math.min(availH * 0.36, 260), best = null;
-  for (let i = 0; i < 24; i++) {
-    const f = (lo + hi) / 2, L = flow(f, availW, false);
-    if (L.lines.length * f * 1.04 <= availH && L.widest <= availW) { lo = f; best = { f, L }; } else hi = f;
-  }
-  if (!best) best = { f: lo, L: flow(lo, availW, false) };
-  const { f, L } = best, n = L.lines.length, cap = f * 0.71;
-  const lh = Math.min(availH / n, f * (narrow ? 1.75 : 1.3)), y0 = top + (availH - lh * n) / 2;
-  rows = [];
-  const byItem = new Map();
-  // wide screens: the lines zig-zag across the page, and the lines pushed to the right are mirrored
-  // (preview first, then the name), so the block reads like a composed poster rather than a list
-  const STAGGER = [0, 1, 0.32, 0.86, 0.1, 0.62];
-  L.lines.forEach((line, li) => {
-    const base = y0 + li * lh + lh * 0.5 + cap * 0.5;
-    const last = line[line.length - 1], used = last.x + last.w, extra = availW - used;
-    let placed = line;
-    let flip = false, shift = 0;
-    if (line.some(p => p.kind === "thumb") && line.some(p => p.kind === "name")) {
-      const k = STAGGER[li % STAGGER.length];
-      shift = extra * k; flip = !narrow && k > 0.5;        // phones keep every line reading name → preview
-      if (flip) {                                    // rebuild the line as preview → name for each project on it
-        const units = [];
-        line.forEach(p => { if (!units.includes(p.u)) units.push(p.u); });
-        const gap = f * 0.3, glue = f * 0.16; let x = 0; placed = [];
-        units.forEach((u, i) => {
-          if (i) x += gap;
-          const has = (kind) => line.some(p => p.u === u && p.kind === kind);
-          if (has("thumb")) { placed.push({ kind: "thumb", u, x, w: u.b }); x += u.b + glue; }
-          if (has("name")) { placed.push({ kind: "name", u, x, w: u.a }); x += u.a; }
-        });
-      }
-    }
-    placed.forEach((p) => {
-      const px = side + p.x + shift, u = p.u;
-      let r = byItem.get(u.item);
-      if (!r) { r = { item: u.item, u, f, cap, rects: [], flip }; byItem.set(u.item, r); rows.push(r); }
-      if (p.kind === "name") {
-        r.name = { x: px, base, w: u.nameW };
-        r.rects.push({ x: px, y: base - cap - f * 0.16, w: p.w, h: cap + f * 0.36 });
-      } else {
-        // mirrored lines put the status dot on the outside of the preview too
-        const tx = flip ? px + u.dot + u.dgap : px;
-        r.thumb = { x: tx, y: base - cap * 0.5 - u.th / 2, w: u.tw, h: u.th };
-        r.dot = { x: flip ? px + u.dot / 2 : px + u.tw + u.dgap + u.dot / 2, y: base - cap * 0.5, r: u.dot / 2 };
-        r.rects.push({ x: px, y: r.thumb.y, w: u.b, h: u.th });
-      }
-    });
-  });
-  rows.forEach(r => { r.fx = r.name.x + r.name.w / 2; r.fy = r.name.base - cap * 0.5; });
-}
+function layout() { layoutWide(W < 700); }
 function rowAt(x, y) { return rows.find(r => r.rects.some(q => x >= q.x - 10 && x <= q.x + q.w + 10 && y >= q.y - 10 && y <= q.y + q.h + 10)) || null; }
 
 function drawRow(c, r) {
@@ -1480,7 +1407,7 @@ function spring(pos, vel, target, k, zeta, dt) {
 
 function frame(now) {
   raf = null;
-  const dt = Math.max(0.001, Math.min(0.05, (now - lastT) / 1000 || 0.016)); lastT = now;   // never backwards: rAF stamps can trail performance.now()
+  const dt = Math.max(0.001, Math.min(0.08, (now - lastT) / 1000 || 0.016)); lastT = now;   // never backwards: rAF stamps can trail performance.now()
   const ft = focusTargets();
   const onTable = gal.phase === "live" || (gal.phase === "opening" && gal.pre), sinking = gal.phase === "wait" || (gal.phase === "opening" && !gal.pre);
   const bigLens = openRow && !gal.phase;
@@ -1612,10 +1539,9 @@ function pvStart(r) {
   const same = pv.row && pv.row.item === r.item && !pv.closing;
   pv.row = r; pv.closing = false;
   if (!same) { pv.t0 = performance.now() + 140; pv.px = pv.py = 0; }
-  const t = r.thumb, dpr = Math.min(devicePixelRatio || 1, 2);
+  const t = r.thumb, dpr = Math.min(devicePixelRatio || 1, 3);       // phones are 3x: draw for them at 3x
   const k = Math.min(dpr * Math.max(1, drop.openMag), 2400 / t.w);   // backing pixels per field unit, at the settled zoom
   pvEl.width = Math.round(t.w * k); pvEl.height = Math.round(t.h * k);
-  pvEl.style.width = t.w + "px"; pvEl.style.height = t.h + "px";
   pvEl.style.opacity = "1";
   if (!pv.raf) pv.raf = requestAnimationFrame(pvTick);
 }
@@ -1630,11 +1556,15 @@ function pvTick(now) {
   const t = r.thumb, m = Math.max(0.01, drop.mag);
   const sx = drop.ax + (drop.ox - drop.ax) * drop.blend, sy = drop.ay + (drop.oy - drop.ay) * drop.blend;
   const X = drop.ax + (t.x - sx) * m, Y = drop.ay + (t.y - sy) * m;
-  pvEl.style.transform = `translate(${X.toFixed(2)}px, ${Y.toFixed(2)}px) scale(${m.toFixed(4)})`;
+  // laid out at its on-screen size (no CSS scale): Safari rasterises a scaled, filtered layer at its unscaled
+  // size and then enlarges it, which turned the preview into a blur on phones
+  const sw = t.w * m, sh = t.h * m;
+  pvEl.style.width = sw.toFixed(2) + "px"; pvEl.style.height = sh.toFixed(2) + "px";
+  pvEl.style.transform = `translate(${X.toFixed(2)}px, ${Y.toFixed(2)}px)`;
   // clipped to the lens while it is still growing over the preview
-  const LR = drop.r * drop.press, lcx = (drop.ax - X) / m, lcy = (drop.ay - Y) / m;
-  const far = Math.max(Math.hypot(lcx, lcy), Math.hypot(t.w - lcx, lcy), Math.hypot(lcx, t.h - lcy), Math.hypot(t.w - lcx, t.h - lcy));
-  pvEl.style.clipPath = LR / m >= far ? "none" : `circle(${Math.max(0, LR / m - 1).toFixed(1)}px at ${lcx.toFixed(1)}px ${lcy.toFixed(1)}px)`;
+  const LR = drop.r * drop.press, lcx = drop.ax - X, lcy = drop.ay - Y;
+  const far = Math.max(Math.hypot(lcx, lcy), Math.hypot(sw - lcx, lcy), Math.hypot(lcx, sh - lcy), Math.hypot(sw - lcx, sh - lcy));
+  pvEl.style.clipPath = LR >= far ? "none" : `circle(${Math.max(0, LR - 1).toFixed(1)}px at ${lcx.toFixed(1)}px ${lcy.toFixed(1)}px)`;
   // the pointer, for the pieces that lean toward it
   let tx = 0, ty = 0;
   if (PV_PARALLAX[r.item.id] && lastMouse && !coarse) {
@@ -2125,7 +2055,7 @@ function sheetHTML(item) {
     <p class="lede">I design and build websites, and the systems behind them.</p>
     <p class="body">Graphics, photo and video since 2017, with my first paid jobs at eleven. The last two years have been the web: client sites, Shopify stores, real-time games and small products of my own. AI is part of how I work every day, which is why things ship fast without getting sloppy.</p>
     <dl class="facts">
-      <div><dt>Based</dt><dd>Náchod, Czechia. In Prague when a project needs it.</dd></div>
+      <div><dt>Based</dt><dd>Náchod, Czechia. In Prague when a project needs&nbsp;it.</dd></div>
       <div><dt>Build</dt><dd><div class="chips"><span>HTML/CSS/JS</span><span>React</span><span>Node.js</span><span>Three.js</span><span>Shopify</span></div></dd></div>
       <div><dt>Make</dt><dd><div class="chips"><span>Photoshop</span><span>Firefly</span><span>Photo</span><span>Video</span><span>Social</span></div></dd></div>
       <div><dt>Contact</dt><dd><div class="copyrow"><code>contact@prmvisual.fun</code><button id="copyMail">Copy</button></div></dd></div>
@@ -2152,17 +2082,50 @@ function sheetHTML(item) {
 function siteHTML(item) {
   const host = (item.link || item.links[0]).href.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "");
   return `<figure class="site"><div class="site-bar" aria-hidden="true"><i></i><i></i><i></i><span>${esc(host)}</span></div>` +
-    `<video muted loop playsinline disablepictureinpicture preload="none" poster="${MEDIA}${item.site}-site.webp" aria-label="A screen recording of ${esc(host)}">` +
-    `<source src="${MEDIA}${item.site}-site.mp4" type="video/mp4"></video></figure>`;
+    `<div class="site-view"><video muted ${reduced ? "" : "autoplay "}loop playsinline webkit-playsinline disablepictureinpicture preload="auto" poster="${MEDIA}${item.site}-site.webp" aria-label="A screen recording of ${esc(host)}" src="${MEDIA}${item.site}-site.mp4"></video>` +
+    `<img class="site-poster" src="${MEDIA}${item.site}-site.webp" alt="" aria-hidden="true"></div></figure>`;
 }
 function siteStart() {
   const v = sheet.querySelector(".site video"); if (!v) return;
-  const fig = v.parentNode;
-  const play = () => { const p = v.play(); if (p && p.catch) p.catch(() => fig.classList.add("paused")); };
+  const fig = v.closest(".site");
+  v.muted = true; v.defaultMuted = true; v.playsInline = true;
+  // the poster image lifts only once a real frame has been drawn
+  const shown = () => fig.classList.add("live");
+  if ("requestVideoFrameCallback" in v) v.requestVideoFrameCallback(shown);
+  else v.addEventListener("timeupdate", function f() { if (v.currentTime > 0.05) { shown(); v.removeEventListener("timeupdate", f); } });
+  const play = () => { if (reduced) v.autoplay = false; const p = v.play(); if (p && p.catch) p.catch(() => fig.classList.add("paused")); };
   v.addEventListener("playing", () => fig.classList.remove("paused"));
+  v.addEventListener("pause", () => { if (!v.ended) fig.classList.add("paused"); });
   v.addEventListener("click", () => { if (v.paused) play(); else { v.pause(); fig.classList.add("paused"); } });
-  if (reduced) { fig.classList.add("paused"); return; }   // reduced motion: the poster, and a click plays it
+  if (reduced) { v.autoplay = false; v.pause(); fig.classList.add("paused"); return; }   // reduced motion: the poster, and a click plays it
   play();
+}
+
+// Photo & Video on a phone: Info / Less folds the sheet open and shut instead of jumping between sizes.
+// Height, title size and spacing all move together; the details fade in after it opens and out as it closes.
+let miniAnims = [];
+function setMini(mini, more) {
+  const h2 = $("#sheetTitle"), sc = sheet.querySelector(".sheet-scroll");
+  const kids = [...sheet.querySelectorAll(".sheet-scroll > :not(.sheet-head):not(h2)")];
+  more.textContent = mini ? "Info" : "Less"; more.setAttribute("aria-expanded", String(!mini));
+  const snap = () => { const cs = getComputedStyle(sc); return { h: sheet.getBoundingClientRect().height, f: parseFloat(getComputedStyle(h2).fontSize), gap: cs.rowGap, pt: cs.paddingTop, pb: cs.paddingBottom }; };
+  const from = snap();
+  miniAnims.forEach(a => a.cancel()); miniAnims = [];
+  sheet.classList.toggle("mini", mini); fitTitle();
+  if (reduced) return;
+  const to = snap();
+  const o = { duration: 460, easing: "cubic-bezier(.2, .9, .25, 1)" };
+  if (mini) { sheet.classList.remove("mini"); fitTitle(); sc.scrollTop = 0; }   // keep the details on screen while it folds
+  miniAnims.push(
+    sheet.animate([{ height: from.h + "px" }, { height: to.h + "px" }], o),
+    h2.animate([{ fontSize: from.f + "px" }, { fontSize: to.f + "px" }], o),
+    sc.animate([{ rowGap: from.gap, paddingTop: from.pt, paddingBottom: from.pb }, { rowGap: to.gap, paddingTop: to.pt, paddingBottom: to.pb }], o)
+  );
+  kids.forEach((k, i) => miniAnims.push(mini
+    ? k.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, easing: "ease-out", fill: "forwards" })
+    : k.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], { duration: 320, delay: 120 + i * 35, easing: "ease-out", fill: "backwards" })));
+  const main = miniAnims[0];
+  main.onfinish = () => { if (mini) { sheet.classList.add("mini"); fitTitle(); miniAnims.forEach(a => a.cancel()); } miniAnims = []; };
 }
 
 let returnFocus = null;
@@ -2195,10 +2158,7 @@ function open(r) {
     // Photo & Video: on a phone the sheet folds down to a title bar so the table gets the screen
     const narrow = W < 700, more = $("#moreBtn");
     sheet.classList.toggle("mini", narrow); fitTitle();
-    if (more) more.addEventListener("click", () => {
-      const mini = sheet.classList.toggle("mini");
-      more.textContent = mini ? "Info" : "Less"; more.setAttribute("aria-expanded", String(!mini)); fitTitle();
-    });
+    if (more) more.addEventListener("click", () => setMini(!sheet.classList.contains("mini"), more));
     drop.tblend = 0; drop.portraitT = 0; detailOn = 0;
     galOpen(r);
     focusIfKeyboard($("#closeBtn"));
@@ -2210,8 +2170,18 @@ function open(r) {
     const done = () => { cm.textContent = "Copied"; setTimeout(() => cm.textContent = "Copy", 1600); };
     try { navigator.clipboard.writeText("contact@prmvisual.fun").then(done, selectMail); } catch (_) { selectMail(); }
   });
-  const sr = sheet.getBoundingClientRect();
+  placeOpen(r);
+  if (r.item !== ME) { pvStart(r); siteStart(); }
+  focusIfKeyboard($("#closeBtn"));
+}
+
+// where the open lens sits and how big it is. Measured from the sheet's layout box, never from its rect:
+// the rect includes the sheet's entrance animation, and whether Safari had applied its first frame yet
+// depended on where you came from (About from the index came out smaller and higher). The lens is placed
+// as it looks with that first frame counted (18px lower, scaled .98), the look that was signed off.
+function placeOpen(r) {
   const narrow = W < 700;
+  const sr = { top: sheet.offsetTop + 18 + sheet.offsetHeight * 0.01, left: sheet.offsetLeft + sheet.offsetWidth * 0.01 };
   const free = narrow ? { w: W, h: Math.max(140, sr.top) } : { w: sr.left, h: H };
   let ax = free.w / 2, ay = free.h / 2 + (narrow ? 10 : 0);
   drop.openR = Math.hypot(W, H) * 1.25; drop.tblend = 1; drop.portraitT = 0;
@@ -2239,11 +2209,8 @@ function open(r) {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, detail);
       detailOn = 1;
     }
-    pvStart(r);
-    siteStart();
   }
   setTarget(ax, ay);
-  focusIfKeyboard($("#closeBtn"));
 }
 
 function close() {
@@ -2251,7 +2218,7 @@ function close() {
   const r = openRow; openRow = null;
   pvStop();
   lbClose(true);
-  const sv = sheet.querySelector(".site video"); if (sv) { sv.pause(); sv.removeAttribute("src"); }
+  const sv = sheet.querySelector(".site video"); if (sv) { sv.pause(); sv.removeAttribute("src"); sv.load(); }
   sheet.hidden = true; sheet.innerHTML = ""; sheet.classList.remove("mini"); document.body.classList.remove("is-open");
   drop.tblend = 0; drop.portraitT = 0;
   if (gal.phase) { galClose(); lastInput = performance.now(); focusIfKeyboard(returnFocus); return; }
@@ -2279,7 +2246,7 @@ function buildIndex() {
 
 // the index pours out of the Index button and drains back into whatever sends you home
 let indexTimer = null;
-function toggleIndex(show, ox, oy, toCanvas = true) {
+function toggleIndex(show, ox, oy, toCanvas = true, fade = false) {
   if (openRow) close();
   setSnap(null);
   clearTimeout(indexTimer);
@@ -2298,13 +2265,16 @@ function toggleIndex(show, ox, oy, toCanvas = true) {
   if (show) {
     spawnHold = false;
     btnBack.classList.remove("sink");
+    indexEl.style.transition = ""; indexEl.style.opacity = "";   // a fade-out cut short by reopening
     indexEl.hidden = false;
     indexEl.getBoundingClientRect();
     requestAnimationFrame(() => indexEl.classList.add("shown"));
     btnBack.hidden = false;
     focusIfKeyboard(indexEl.querySelector("button"));
   } else {
-    indexEl.classList.remove("shown");
+    fade = fade && !reduced;
+    if (fade) { indexEl.style.transition = "opacity .24s ease"; indexEl.style.opacity = "0"; }
+    else indexEl.classList.remove("shown");
     btnBack.classList.add("sink");
     if (toCanvas && glOK) {
       // park the drop, invisible, where the pointer is; it grows back once the index is gone
@@ -2320,12 +2290,13 @@ function toggleIndex(show, ox, oy, toCanvas = true) {
       if (done) return; done = true;
       indexEl.removeEventListener("transitionend", onEnd);
       indexEl.hidden = true; btnBack.hidden = true; btnBack.classList.remove("sink");
+      if (fade) { indexEl.style.transition = "none"; indexEl.classList.remove("shown"); indexEl.getBoundingClientRect(); indexEl.style.transition = ""; indexEl.style.opacity = ""; }
       // wait one frame so the canvas is on screen before the drop starts to grow
       requestAnimationFrame(() => { spawnHold = false; lastInput = performance.now(); lastT = performance.now(); kick(); });
     };
     const onEnd = (e) => { if (e.target === indexEl && e.propertyName === "clip-path") finish(); };
     indexEl.addEventListener("transitionend", onEnd);
-    indexTimer = setTimeout(finish, reduced ? 0 : 780);
+    indexTimer = setTimeout(finish, reduced ? 0 : fade ? 260 : 780);
     if (!openRow) focusIfKeyboard(btnIndex);
   }
   kick();
@@ -2333,7 +2304,7 @@ function toggleIndex(show, ox, oy, toCanvas = true) {
 function centre(el) { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }
 btnIndex.addEventListener("click", () => { if (glOK && indexEl.hidden) toggleIndex(true, ...centre(btnIndex)); });
 $("#btnBack").addEventListener("click", () => toggleIndex(false, ...centre($("#btnBack"))));
-btnAbout.addEventListener("click", () => { if (!indexEl.hidden) toggleIndex(false, undefined, undefined, false); if (openRow) close(); open(ABOUT); });
+btnAbout.addEventListener("click", () => { if (!indexEl.hidden) toggleIndex(false, undefined, undefined, false, true); if (openRow) close(); open(ABOUT); });
 
 /* ============================== BOOT ============================== */
 function resize() {
@@ -2343,7 +2314,10 @@ function resize() {
   layout();
   if (glOK) { buildField(gl.getParameter(gl.MAX_TEXTURE_SIZE)); uploadTextures(); }
   if (openRow && gal.phase && gal.row) { galRelayout(); openRow = gal.row; }
-  else if (openRow) { const r = openRow.item === ME ? ABOUT : rows.find(x => x.item === openRow.item); openRow = null; open(r); }
+  else if (openRow) {
+    const r = openRow.item === ME ? ABOUT : rows.find(x => x.item === openRow.item);
+    openRow = r; fitTitle(); placeOpen(r); if (r.item !== ME) pvStart(r);
+  }
   else if (gal.phase) galRelayout();
   kick();
 }
