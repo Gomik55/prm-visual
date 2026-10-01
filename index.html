@@ -1101,7 +1101,7 @@ const gl = cvs.getContext("webgl", { antialias: false, alpha: false, premultipli
 const VS = `attribute vec2 a; void main(){ gl_Position = vec4(a, 0.0, 1.0); }`;
 const FS = `
 precision highp float;
-uniform sampler2D uSharp, uBlur, uDetail, uPortrait;
+uniform sampler2D uSharp, uBlur, uDetail, uPortrait, uSoft;   // uBlur, uGBlur and uSoft are baked once (bake())
 uniform float uPortraitOn;
 uniform vec4 uDRect;
 uniform float uDetailOn;
@@ -1121,6 +1121,9 @@ uniform float uIrisMode, uIrisAp, uIrisRot, uIrisFade;   // mode: 0 = canvas onl
 uniform vec2 uIrisC;
 uniform vec4 uVRect; uniform float uVidOn, uTileR;
 uniform float uHiMode; uniform vec4 uHiBox; uniform float uHiBoxR;
+// the canvas: a project's real site playing in its preview under the lens, and the ripple of the first drop
+uniform vec4 uSRect; uniform float uSiteAmt, uSRad; uniform vec2 uSScale;
+uniform vec4 uRip;               // impact x, y, seconds since impact, strength
 
 vec2 toUV(vec2 p) { return vec2(p.x / uView.x, 1.0 - p.y / uView.y); }
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
@@ -1138,7 +1141,21 @@ float sdBox(vec2 p, vec2 b, float r) { vec2 q = abs(p) - b + r; return length(ma
 vec3 fieldSharp(vec2 p) {
   vec2 q = (p - uDRect.xy) / uDRect.zw;
   if (uDetailOn > 0.5 && q.x > 0.0 && q.x < 1.0 && q.y > 0.0 && q.y < 1.0) return texture2D(uDetail, vec2(q.x, 1.0 - q.y)).rgb;
-  return texture2D(uSharp, toUV(p)).rgb;
+  vec3 c = texture2D(uSharp, toUV(p)).rgb;
+#if MODE == 0
+  if (uSiteAmt > 0.001) {
+    vec2 s = (p - uSRect.xy) / uSRect.zw;
+    if (s.x > 0.0 && s.x < 1.0 && s.y > 0.0 && s.y < 1.0) {
+      float sd = sdBox(p - uSRect.xy - uSRect.zw * 0.5, uSRect.zw * 0.5, uSRad);
+      float m = (1.0 - smoothstep(-0.6, 0.6, sd)) * uSiteAmt;
+      vec2 v = (s - 0.5) * uSScale + 0.5;                       // cover: the recording fills the preview's shape
+      vec3 site = texture2D(uVid, vec2(v.x, 1.0 - v.y)).rgb;
+      site = mix(site, vec3(1.0), 0.14 * (1.0 - smoothstep(0.0, 0.9, -sd)));   // the preview's hairline rim
+      c = mix(c, site, m);
+    }
+  }
+#endif
+  return c;
 }
 vec3 tableSharp(vec2 p) {
   vec3 c = texture2D(uGSharp, toUV(p)).rgb;
@@ -1165,37 +1182,30 @@ vec4 iris(vec2 p) {
               + (1.0 - smoothstep(0.0, 1.3, abs(r - ring))) * 0.34 * (1.0 - hole);
   return vec4(hole, barrel * (1.0 - hole), tw, light) * vec4(uIrisFade, uIrisFade, 1.0, uIrisFade);
 }
+// one program per MODE (0 = the canvas, 1 = the iris opening, 2 = the light table), so a GPU never
+// runs the other modes' code: compilers often flatten branches like these and pay for every path
 vec3 sharp(vec2 p) {
-  if (uIrisMode < 0.5) return fieldSharp(p);
-  if (uIrisMode > 1.5) return tableSharp(p);
+#if MODE == 0
+  return fieldSharp(p);
+#elif MODE == 2
+  return tableSharp(p);
+#else
   float h = iris(p).x;
   if (h < 0.001) return fieldSharp(p);
   if (h > 0.999) return tableSharp(p);
   return mix(fieldSharp(p), tableSharp(p), h);
+#endif
 }
 
-vec3 fieldBlur(vec2 p) {
-  vec2 uv = toUV(p);
-  vec3 c = texture2D(uBlur, uv).rgb * 2.0;
-  for (int i = 0; i < 8; i++) {
-    float a = float(i) * 0.7853982 + 0.39;
-    c += texture2D(uBlur, uv + vec2(cos(a), sin(a)) * uTexel * 1.8).rgb;
-  }
-  return c / 10.0;
-}
-vec3 tableBlur(vec2 p) {
-  vec2 uv = toUV(p);
-  vec3 c = texture2D(uGBlur, uv).rgb * 2.0;
-  for (int i = 0; i < 8; i++) {
-    float a = float(i) * 0.7853982 + 0.39;
-    c += texture2D(uGBlur, uv + vec2(cos(a), sin(a)) * uGTexel * 1.5).rgb;
-  }
-  return c / 10.0;
-}
+vec3 fieldBlur(vec2 p) { return texture2D(uBlur, toUV(p)).rgb; }
+vec3 tableBlur(vec2 p) { return texture2D(uGBlur, toUV(p)).rgb; }
 // the resting surface outside the drop; while the iris moves, its blades and edges are drawn here too
 vec3 blurAt(vec2 p) {
-  if (uIrisMode < 0.5) return fieldBlur(p) * uDim;
-  if (uIrisMode > 1.5) return tableBlur(p) * uDim;
+#if MODE == 0
+  return fieldBlur(p) * uDim;
+#elif MODE == 2
+  return tableBlur(p) * uDim;
+#else
   vec4 I = iris(p);
   vec3 under = fieldBlur(p) * uDim;
   vec3 blade = vec3(0.086, 0.09, 0.106) * (0.7 + 0.9 * I.z) + 0.07 * I.z * I.z + under * 0.22;
@@ -1206,6 +1216,7 @@ vec3 blurAt(vec2 p) {
   vec2 d = p - uIrisC; float a = atan(d.y, d.x) - uIrisRot, k = mod(a, 1.0471976) - 0.5235988;
   table *= 1.0 - 0.5 * (1.0 - smoothstep(0.0, 22.0, uIrisAp - r * cos(k)));             // blades' shadow just inside the opening
   return mix(outside, table, I.x) + vec3(1.0, 0.98, 0.95) * I.w;
+#endif
 }
 
 void main() {
@@ -1213,7 +1224,19 @@ void main() {
   float s = sdf(p);
 
   // the unfocused surface, with the drop's soft contact shadow
-  vec3 col = blurAt(p);
+  vec2 pb = p; float glow = 0.0;
+#if MODE == 0
+  if (uRip.w > 0.001) {
+    // the first drop lands: a packet of rings runs out across the surface and bends it as it passes
+    vec2 d = p - uRip.xy; float r = length(d);
+    float x = r - uRip.z * 820.0;
+    float env = exp(-x * x / 7200.0) * uRip.w;
+    float w = sin(x * 0.06);
+    pb += d / max(r, 1.0) * w * env * 16.0;
+    glow = w * env * 0.06 + env * 0.03;            // a lit crest and a soft trough, readable even on black
+  }
+#endif
+  vec3 col = blurAt(pb) + glow;
   float sh = 1.0 - smoothstep(-8.0, 30.0, sdf(p - vec2(0.0, 14.0)));
   col *= 1.0 - 0.45 * sh * step(0.0, s) * smoothstep(1.0, 24.0, uRA);
   col += (hash(floor(p * uDpr)) - 0.5) * 0.016;
@@ -1248,7 +1271,10 @@ void main() {
         hi = max(capMask(q, uHi0, uFeather), capMask(q, uHi1, uFeather));
         halo = max(capMask(q, uHi0, uFeather * 2.4), capMask(q, uHi1, uFeather * 2.4));
       }
-      // smooth gaussian-weighted disc blur, sampled from the full-resolution surface
+      // smooth gaussian-weighted disc blur of the surface: baked for the canvas, sampled live on the table
+#if MODE == 0
+      vec3 soft = texture2D(uSoft, toUV(q)).rgb;
+#else
       vec3 soft = vec3(0.0); float wsum = 0.0;
       float spin = hash(floor(p * uDpr)) * 6.2831;
       for (int i = 0; i < 20; i++) {
@@ -1260,6 +1286,7 @@ void main() {
         wsum += w;
       }
       soft /= wsum;
+#endif
       // on the table the colours stay alive at the rim: only a gentle falloff toward it
       vec3 dimmed = uHiMode > 0.5 ? mix(soft, inside, 0.4) * 0.84 : soft * 0.64;
       vec3 lit = uHiMode > 0.5 ? inside * 1.02 : inside * 1.04 + soft * 0.06;
@@ -1294,26 +1321,87 @@ void main() {
   gl_FragColor = vec4(col, 1.0);
 }`;
 
-let U = {}, texSharp, texBlur, texDetail, texPortrait, texTable, texTableBlur, texVid, glOK = !!gl;
+const BAKE_FS = `
+precision highp float;
+uniform sampler2D uSrc; uniform vec2 uSize, uStep; uniform float uKind;
+void main() {
+  vec2 uv = gl_FragCoord.xy / uSize;
+  vec3 c = vec3(0.0);
+  if (uKind < 0.5) {
+    // the soft surface outside the drop: centre plus a ring of 8
+    c = texture2D(uSrc, uv).rgb * 2.0;
+    for (int i = 0; i < 8; i++) { float a = float(i) * 0.7853982 + 0.39; c += texture2D(uSrc, uv + vec2(cos(a), sin(a)) * uStep).rgb; }
+    c /= 10.0;
+  } else {
+    // the dimmed surface inside the drop: a gaussian-weighted disc of 20
+    float wsum = 0.0;
+    for (int i = 0; i < 20; i++) {
+      float fi = float(i) + 0.5, rr2 = sqrt(fi / 20.0), a = fi * 2.39996, w = exp(-rr2 * rr2 * 2.2);
+      c += texture2D(uSrc, uv + vec2(cos(a), sin(a)) * rr2 * uStep).rgb * w; wsum += w;
+    }
+    c /= wsum;
+  }
+  gl_FragColor = vec4(c, 1.0);
+}`;
+let U = {}, texSharp, texBlur, texDetail, texPortrait, texTable, texTableBlur, texVid, texSoft, texRaw, glOK = !!gl;
+const progs = [], bakeP = {}; let progMode = -1, fbo = null;
 function blank(unit, t) { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([13, 13, 14, 255])); }
 const blurCanvas = document.createElement("canvas");
 
 function compile(type, src) { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
-function initGL() {
+const UNIFORMS = ["uSharp", "uBlur", "uView", "uDpr", "uA", "uB", "uSrc", "uRA", "uRB", "uK", "uMag", "uBevel", "uDim", "uDetail", "uDRect", "uDetailOn", "uSeg", "uHi0", "uHi1", "uHiAmt", "uFeather", "uPortrait", "uPortraitOn", "uSoft",
+  "uGSharp", "uGBlur", "uVid", "uGTexel", "uIrisMode", "uIrisAp", "uIrisRot", "uIrisFade", "uIrisC", "uVRect", "uVidOn", "uTileR", "uHiMode", "uHiBox", "uHiBoxR", "uSRect", "uSiteAmt", "uSRad", "uSScale", "uRip"];
+function link(fsSrc) {
   const prog = gl.createProgram();
-  gl.attachShader(prog, compile(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FS));
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fsSrc));
+  gl.bindAttribLocation(prog, 0, "a");
   gl.linkProgram(prog); if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  return prog;
+}
+// the drop's program for a mode, compiled the first time it's needed
+function program(mode) {
+  if (progs[mode]) return progs[mode];
+  const prog = link("#define MODE " + mode + "\n" + FS), u = {};
+  UNIFORMS.forEach(n => u[n] = gl.getUniformLocation(prog, n));
   gl.useProgram(prog);
+  [["uSharp", 0], ["uBlur", 1], ["uDetail", 2], ["uPortrait", 3], ["uGSharp", 4], ["uGBlur", 5], ["uVid", 6], ["uSoft", 7]].forEach(([n, i]) => gl.uniform1i(u[n], i));
+  progMode = -1;
+  return (progs[mode] = { prog, U: u });
+}
+function useMode(mode) {
+  const P = program(mode);
+  if (progMode !== mode) { gl.useProgram(P.prog); progMode = mode; }
+  U = P.U;
+}
+// runs a blur once into a texture, so the drop reads one texel per pixel instead of 9 or 20 every frame
+function bake(dst, src, w, h, kind, stepX, stepY) {
+  gl.useProgram(bakeP.prog); progMode = -1;
+  // size the target first, then put the source on unit 7, the only unit the bake program reads
+  gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, dst);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.bindTexture(gl.TEXTURE_2D, src);
+  gl.uniform1i(bakeP.uSrc, 7); gl.uniform2f(bakeP.uSize, w, h); gl.uniform2f(bakeP.uStep, stepX, stepY); gl.uniform1f(bakeP.uKind, kind);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, dst, 0);
+  gl.viewport(0, 0, w, h);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, null, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  [[0, texSharp], [1, texBlur], [5, texTableBlur], [7, texSoft]].forEach(([u, t]) => { gl.activeTexture(gl.TEXTURE0 + u); gl.bindTexture(gl.TEXTURE_2D, t); });
+}
+function initGL() {
   const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-  const a = gl.getAttribLocation(prog, "a"); gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0);
-  ["uSharp", "uBlur", "uView", "uDpr", "uA", "uB", "uSrc", "uRA", "uRB", "uK", "uMag", "uBevel", "uDim", "uTexel", "uDetail", "uDRect", "uDetailOn", "uSeg", "uHi0", "uHi1", "uHiAmt", "uFeather", "uPortrait", "uPortraitOn",
-    "uGSharp", "uGBlur", "uVid", "uGTexel", "uIrisMode", "uIrisAp", "uIrisRot", "uIrisFade", "uIrisC", "uVRect", "uVidOn", "uTileR", "uHiMode", "uHiBox", "uHiBoxR"].forEach(n => U[n] = gl.getUniformLocation(prog, n));
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  bakeP.prog = link(BAKE_FS);
+  ["uSrc", "uSize", "uStep", "uKind"].forEach(n => bakeP[n] = gl.getUniformLocation(bakeP.prog, n));
+  fbo = gl.createFramebuffer();
+  useMode(0);
+  // the iris and the light table compile once the page has settled, not in the middle of the first click
+  setTimeout(() => { try { program(1); program(2); useMode(0); } catch (err) { console.error(err); } }, 2500);
   const mk = () => { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; };
-  texSharp = mk(); texBlur = mk(); texDetail = mk(); texPortrait = mk(); texTable = mk(); texTableBlur = mk(); texVid = mk();
-  gl.uniform1i(U.uSharp, 0); gl.uniform1i(U.uBlur, 1); gl.uniform1i(U.uDetail, 2); gl.uniform1i(U.uPortrait, 3);
-  gl.uniform1i(U.uGSharp, 4); gl.uniform1i(U.uGBlur, 5); gl.uniform1i(U.uVid, 6);
-  [[4, texTable], [5, texTableBlur], [6, texVid]].forEach(([u, t]) => blank(u, t));
+  texSharp = mk(); texBlur = mk(); texDetail = mk(); texPortrait = mk(); texTable = mk(); texTableBlur = mk(); texVid = mk(); texSoft = mk(); texRaw = mk();
+  [[4, texTable], [5, texTableBlur], [6, texVid], [7, texSoft]].forEach(([u, t]) => blank(u, t));
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, texPortrait);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([13, 13, 14, 255]));
   const img = new Image();
@@ -1341,12 +1429,16 @@ function gaussian(ctx, w, h, sigma) {
   ctx.putImageData(img, 0, 0);
 }
 function uploadTextures() {
+  holdPace(1200);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texSharp);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, field);
   softCopy(field, blurCanvas, 8, 2.2);
-  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, texBlur);
+  gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, texRaw);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, blurCanvas);
+  bake(texBlur, texRaw, blurCanvas.width, blurCanvas.height, 0, 1.8 / blurCanvas.width, 1.8 / blurCanvas.height);
+  // the inside blur works in surface pixels (2.6 px); half the field's resolution holds it without loss
+  bake(texSoft, texSharp, Math.max(2, field.width >> 1), Math.max(2, field.height >> 1), 1, 2.6 / W, 2.6 / H);
 }
 // background blur built by hand, so every browser gets the same smooth result
 // (Safari ignores canvas filters, and one big downscale step aliases into streaks)
@@ -1397,6 +1489,21 @@ function range() {
 function focusTargets() { const L = range(); return { r: L.rMin + (L.rMax - L.rMin) * focus, mag: L.magMax + (L.magMin - L.magMax) * focus }; }
 function setTarget(x, y) { drop.tx = Math.max(0, Math.min(W, x)); drop.ty = Math.max(0, Math.min(H, y)); kick(); }
 let booted = false;
+// Safety net for slow graphics (an integrated GPU, or a browser with hardware acceleration off): if the drop
+// keeps missing frames while it moves, draw the glass at fewer pixels. Fast machines never see it.
+let renderScale = Math.min(devicePixelRatio || 1, 2), chain = false, prevNow = 0;
+const perf = { f: 1, s: [], hold: 0 };
+function scaleCanvas() {
+  renderScale = Math.max(0.5, Math.min(devicePixelRatio || 1, 2) * perf.f);
+  cvs.width = Math.round(W * renderScale); cvs.height = Math.round(H * renderScale);
+}
+function pace(iv, now) {
+  if (!iv || iv > 600 || now < perf.hold) { if (iv > 600) perf.s = []; return; }
+  perf.s.push(iv); if (perf.s.length < 24) return;
+  const m = perf.s.sort((a, b) => a - b)[12]; perf.s = [];
+  if (m > 42 && perf.f > 0.4) { perf.f *= 0.75; perf.hold = now + 1200; scaleCanvas(); }
+}
+function holdPace(ms) { perf.hold = performance.now() + ms; perf.s = []; }
 function kick() { if (!raf && glOK && booted) { lastT = performance.now(); raf = requestAnimationFrame(frame); } }
 
 function spring(pos, vel, target, k, zeta, dt) {
@@ -1407,6 +1514,7 @@ function spring(pos, vel, target, k, zeta, dt) {
 
 function frame(now) {
   raf = null;
+  pace(chain ? now - prevNow : 0, now); prevNow = now;
   const dt = Math.max(0.001, Math.min(0.08, (now - lastT) / 1000 || 0.016)); lastT = now;   // never backwards: rAF stamps can trail performance.now()
   const ft = focusTargets();
   const onTable = gal.phase === "live" || (gal.phase === "opening" && gal.pre), sinking = gal.phase === "wait" || (gal.phase === "opening" && !gal.pre);
@@ -1441,6 +1549,7 @@ function frame(now) {
 
   const sx = drop.ax + (drop.ox - drop.ax) * drop.blend, sy = drop.ay + (drop.oy - drop.ay) * drop.blend;
   const hiBusy = updateHighlight(sx, sy, dt);
+  const siteBusy = siteStep(sx, sy, dt, now), introBusy = introStep(now);
   draw(sx, sy);
   ui(sx, sy);
 
@@ -1449,11 +1558,13 @@ function frame(now) {
     Math.abs(tR - drop.r) > 0.05 || Math.abs(drop.rv) > 0.5 || Math.abs(drop.pressT - drop.press) > 0.001 || Math.abs(drop.pressV) > 0.01 ||
     Math.abs(tMag - drop.mag) > 0.001 || Math.abs(drop.tblend - drop.blend) > 0.001 ||
     Math.abs(drop.segT - drop.seg) > 0.05 || Math.abs(drop.segV) > 0.5 || Math.abs(drop.portraitT - drop.portrait) > 0.002;
-  if (busy || hiBusy || galBusy || gal.phase === "wait") raf = requestAnimationFrame(frame);
+  if (busy || hiBusy || galBusy || siteBusy || introBusy || gal.phase === "wait") raf = requestAnimationFrame(frame);
+  chain = !!raf;
 }
 
 function draw(sx, sy) {
-  const dpr = Math.min(devicePixelRatio || 1, 2);
+  useMode(!gal.phase || gal.phase === "wait" ? 0 : gal.phase === "live" ? 2 : 1);
+  const dpr = renderScale;
   const R = Math.max(0, drop.r * drop.press);
   gl.viewport(0, 0, cvs.width, cvs.height);
   gl.uniform2f(U.uView, W, H); gl.uniform1f(U.uDpr, dpr);
@@ -1467,8 +1578,8 @@ function draw(sx, sy) {
   gl.uniform1f(U.uHiAmt, hi.amt); gl.uniform1f(U.uFeather, hi.feather);
   gl.uniform1f(U.uPortraitOn, drop.portrait);
   gl.uniform1f(U.uBevel, Math.max(8, Math.min(R * 0.34, 58)));
-  gl.uniform1f(U.uDim, 0.8 + 0.14 * (gal.phase ? gal.p : 0));
-  gl.uniform2f(U.uTexel, 1 / blurCanvas.width, 1 / blurCanvas.height);
+  const fi = introFade(performance.now()), fe = fi * fi * (3 - 2 * fi);
+  gl.uniform1f(U.uDim, (0.8 + 0.14 * (gal.phase ? gal.p : 0)) * (0.25 + 0.75 * fe));
   gl.uniform4f(U.uDRect, detailRect[0], detailRect[1], detailRect[2], detailRect[3]);
   gl.uniform1f(U.uDetailOn, detailOn);
   gl.uniform1f(U.uIrisMode, !gal.phase || gal.phase === "wait" ? 0 : gal.phase === "live" ? 2 : 1);
@@ -1478,6 +1589,14 @@ function draw(sx, sy) {
   gl.uniform4f(U.uVRect, vt ? vt.x : 0, vt ? vt.y : 0, vt ? vt.w : 1, vt ? vt.h : 1);
   gl.uniform1f(U.uVidOn, vt && gal.vidLive ? 1 : 0); gl.uniform1f(U.uTileR, gal.rad);
   gl.uniform1f(U.uHiMode, hi.mode); gl.uniform4f(U.uHiBox, hi.bx[0], hi.bx[1], hi.bx[2], hi.bx[3]); gl.uniform1f(U.uHiBoxR, gal.rad);
+  const st = site.row && site.row.thumb;
+  gl.uniform1f(U.uSiteAmt, st ? site.amt : 0);
+  if (st) {
+    gl.uniform4f(U.uSRect, st.x, st.y, st.w, st.h); gl.uniform1f(U.uSRad, st.h * 0.28);
+    const va = site.el && site.el.videoWidth ? site.el.videoWidth / site.el.videoHeight : 960 / 574, ta = st.w / st.h;
+    gl.uniform2f(U.uSScale, ta > va ? 1 : ta / va, ta > va ? va / ta : 1);
+  }
+  gl.uniform4f(U.uRip, rip.x, rip.y, rip.t, rip.amp);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 }
 
@@ -1493,6 +1612,86 @@ function hiRects(r) {
   }
   return [[n.x - f * 0.06, ny, n.x + n.w + f * 0.06, rad], [t.x - f * 0.04, ty, end, t.h / 2 + f * 0.1]];
 }
+/* ---------- the real site, live in the lens ----------
+   Rest the drop on a project's preview and, after a moment, the preview becomes a recording of the real
+   site, playing inside the glass (bent and lit like everything else under it). The recordings are the same
+   silent loops the project sheets use; one <video> is reused and only the one you rest on is loaded. */
+const SAVE = !!(navigator.connection && navigator.connection.saveData);
+const site = { el: null, id: null, row: null, cand: null, since: 0, amt: 0, ready: false, lastVT: -1, timer: null };
+function siteVideo(id) {
+  let v = site.el;
+  if (!v) {
+    v = site.el = document.createElement("video");
+    v.muted = true; v.defaultMuted = true; v.playsInline = true; v.loop = true; v.preload = "auto";
+    v.setAttribute("muted", ""); v.setAttribute("playsinline", "");
+    v.addEventListener("playing", kick);
+  }
+  if (site.id !== id) { site.id = id; site.ready = false; site.lastVT = -1; v.src = MEDIA + id + "-site.mp4"; }
+  const p = v.play(); if (p && p.catch) p.catch(() => {});
+}
+function siteStep(sx, sy, dt, now) {
+  let cand = null;
+  if (!reduced && !SAVE && glOK && !openRow && !gal.phase && !snap && !spawnHold && indexEl.hidden) {
+    const r = rowAt(sx, sy);
+    if (r && r.item.site) {
+      // only once the drop is resting with the preview well inside the glass
+      const t = r.thumb, m = Math.max(1, drop.mag), R = drop.r * drop.press;
+      const dx = (t.x + t.w / 2 - sx) * m, dy = (t.y + t.h / 2 - sy) * m;
+      if (Math.hypot(dx, dy) < R * 0.8 && Math.hypot(drop.avx, drop.avy) < 90) cand = r;
+    }
+  }
+  if (cand !== site.cand) {
+    site.cand = cand; site.since = now; clearTimeout(site.timer);
+    if (cand) site.timer = setTimeout(kick, 620);
+  }
+  const dwell = cand && now - site.since > 560;
+  // a different project: fade the old recording out before the next one starts
+  if (dwell && site.row !== cand && site.amt < 0.01) { site.row = cand; siteVideo(cand.item.site); }
+  const want = dwell && site.row === cand, v = site.el;
+  // a new frame of the recording goes up to the glass (the first one before the fade starts)
+  if (want && v && v.readyState >= 2 && v.currentTime !== site.lastVT) {
+    try {
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, texVid);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, v);
+      site.lastVT = v.currentTime; site.ready = true;
+    } catch (_) { site.ready = false; }
+  }
+  const target = want && site.ready ? 1 : 0;
+  site.amt += (target - site.amt) * (1 - Math.pow(1 - (target ? 0.09 : 0.18), dt * 60));
+  if (!want && site.amt < 0.004) {
+    site.amt = 0;
+    if (v && !v.paused) v.pause();
+  }
+  return site.amt > 0 || !!want;
+}
+
+/* ---------- the first drop ----------
+   On arrival the surface fades up, the drop lands on the first project with a little splash (it grows past
+   its size and spreads sideways, then settles), and rings run out across the surface from where it hit. */
+const rip = { x: 0, y: 0, t: 0, amp: 0, t0: 0, fade0: 0 };
+function intro() {
+  if (reduced) return;
+  rip.fade0 = performance.now();
+  spawnHold = true; drop.r = 0; drop.rv = 0;
+  setTimeout(() => {
+    spawnHold = false;
+    drop.rv = 1500; drop.segV = 520;                // lands fast and spreads, then the springs pull it round
+    rip.x = drop.ax; rip.y = drop.ay; rip.t0 = performance.now(); rip.amp = 1;
+    lastInput = performance.now(); kick();
+  }, 420);
+  kick();
+}
+function introStep(now) {
+  if (rip.t0) {
+    rip.t = (now - rip.t0) / 1000;
+    const k = Math.max(0, 1 - rip.t / 1.9); rip.amp = k * k;
+    if (!rip.amp) rip.t0 = 0;
+  }
+  return !!rip.t0 || introFade(now) < 1;
+}
+function introFade(now) { return rip.fade0 ? Math.min(1, (now - rip.fade0) / 650) : 1; }
+
 function updateHighlight(sx, sy, dt) {
   const tile = gal.phase === "live" && !lb.open ? tileAt(sx, sy) : null;
   const r = gal.phase || openRow || snap || spawnHold || !indexEl.hidden ? null : rowAt(sx, sy);
@@ -1669,6 +1868,7 @@ function paintTable(c) {
   });
 }
 function buildTable() {
+  holdPace(1200);
   const dpr = Math.min(devicePixelRatio || 1, 2), cap = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), 4096);
   const k = Math.min(dpr * 2, cap / Math.max(W, H));
   table.width = Math.round(W * k); table.height = Math.round(H * k);
@@ -1678,8 +1878,9 @@ function buildTable() {
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, texTable);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, table);
   softCopy(table, tableSoft, 4, 1.25);
-  gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, texTableBlur);
+  gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, texRaw);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, tableSoft);
+  bake(texTableBlur, texRaw, tableSoft.width, tableSoft.height, 0, 1.5 / tableSoft.width, 1.5 / tableSoft.height);
 }
 function irisFrom(r) {
   const A = apertureOf(r.thumb);
@@ -2309,8 +2510,8 @@ btnAbout.addEventListener("click", () => { if (!indexEl.hidden) toggleIndex(fals
 /* ============================== BOOT ============================== */
 function resize() {
   W = innerWidth; H = innerHeight;
-  const dpr = Math.min(devicePixelRatio || 1, 2);
-  cvs.width = Math.round(W * dpr); cvs.height = Math.round(H * dpr);
+  site.row = null; site.cand = null; site.amt = 0;
+  scaleCanvas(); holdPace(1500);
   layout();
   if (glOK) { buildField(gl.getParameter(gl.MAX_TEXTURE_SIZE)); uploadTextures(); }
   if (openRow && gal.phase && gal.row) { galRelayout(); openRow = gal.row; }
@@ -2337,6 +2538,7 @@ async function boot() {
   const ft = focusTargets(); drop.r = ft.r; drop.mag = ft.mag;
   booted = true;
   resize();
+  intro();
   if (reduced) toggleIndex(true, W - 60, 40);
   let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(resize, 140); });
   setTimeout(loadReel, 1500);                        // the table's frames arrive quietly in the background
